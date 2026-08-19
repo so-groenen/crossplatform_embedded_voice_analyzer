@@ -170,6 +170,7 @@ public:
                             /*,pxTaskStatusArray[i].uxCoreAffinityMask*/
                             /*,u32CorePct*/ );
                     }
+                    System::console.log("------------------------------------------------------\n");
 
                 // System::console.do_locked([&]
                 // {
