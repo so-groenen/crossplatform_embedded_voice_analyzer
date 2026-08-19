@@ -1,38 +1,31 @@
 #include <cstdarg>
+#include <cstdint>
 #include <print>
+#include "embedded_hal/traits.hpp"
+#include "driver/led.hpp"
 #include "FreeRTOS/Task.hpp" 
-#include "FreeRTOS/Mutex.hpp"
 #include <pthread.h>
 
 
-class Console 
+
+
+namespace System 
 {
-    FreeRTOS::Mutex mutex{}; 
-public:
-    template <typename... Args>
-    void log(std::format_string<Args...> fmt, Args&&... args)
-    {
-        mutex.lock();
-        std::println(fmt, std::forward<Args>(args)...);
-        mutex.unlock();
-    }
-};
-
-namespace System {
-    Console console{};
-
+    extern Console console;
 };
 
  
-
-class ExampleTask : public FreeRTOS::Task 
+namespace Test
 {
+class UnixTask : public FreeRTOS::Task 
+{
+    uint16_t m_ms{1000};
 public:
-    ExampleTask(UBaseType_t priority, uint16_t stackDepth, const char* name)
-        : FreeRTOS::Task(priority, stackDepth, name)
-        {
-            std::println("Posix FreeRtos task created");
-        }
+    UnixTask(uint16_t ms)
+        : m_ms{ms}
+    {
+        std::println("Posix FreeRtos task created");
+    }
 
 protected:
     void taskFunction() override 
@@ -40,15 +33,22 @@ protected:
         while (true) 
         {
             System::console.log("Hello from FreeRTOS C++ Task on Unix!");
-            FreeRTOS::Task::delay(pdMS_TO_TICKS(1000));
+            FreeRTOS::Task::delay(pdMS_TO_TICKS(m_ms));
         }
     }
 };
+}
 
 int main() 
 {
+    constexpr uint16_t pin{16};
+    constexpr uint16_t ms_blinky{500};
+    constexpr uint16_t ms_unix{2000};
+
     std::println("Starting FreeRTOS Scheduler...");
-    ExampleTask task(1, 2048, "TestTask");
+
+    Test::UnixTask task1{ms_unix};
+    embedded_hal::Test::BlinkyTask led_task{LED{pin}, ms_blinky};
 
     FreeRTOS::Kernel::startScheduler();
     return 0;

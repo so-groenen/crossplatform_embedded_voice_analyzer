@@ -32,7 +32,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Cpp/FreeRTOS-Cpp)
 # target_link_libraries(my_proj PRIVATE rtos-cpp)
 
 # API (Concepts + driver)
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/embedded_hal)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/embedded_hal)
 
 if(PLATFORM STREQUAL "MCU1")
     add_subdirectory(mcus/mcu1)
