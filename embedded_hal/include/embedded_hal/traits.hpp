@@ -26,7 +26,7 @@ namespace Test
         uint16_t m_ms_blink;
     public:
         BlinkyTask(LedType led, uint16_t ms_blink)
-            : FreeRTOS::Task(1, 2024, "name"), m_led(std::move(led)), m_ms_blink{ms_blink}
+            : FreeRTOS::Task(1, 2024, "blinky-test"), m_led(std::move(led)), m_ms_blink{ms_blink}
         {
         }
         void taskFunction() override

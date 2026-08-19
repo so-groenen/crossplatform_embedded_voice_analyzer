@@ -4,9 +4,10 @@
 #include "embedded_hal/traits.hpp"
 #include "driver/led.hpp"
 #include "FreeRTOS/Task.hpp" 
+#include "projdefs.h"
 #include <pthread.h>
 
-
+#include "stats.hpp"
 
 
 namespace System 
@@ -15,6 +16,8 @@ namespace System
 };
 
  
+
+
 namespace Test
 {
 class UnixTask : public FreeRTOS::Task 
@@ -22,7 +25,7 @@ class UnixTask : public FreeRTOS::Task
     uint16_t m_ms{1000};
 public:
     UnixTask(uint16_t ms)
-        : m_ms{ms}
+        : FreeRTOS::Task(1, 2024, "unix-test"), m_ms{ms}
     {
         std::println("Posix FreeRtos task created");
     }
@@ -49,6 +52,7 @@ int main()
 
     Test::UnixTask task1{ms_unix};
     embedded_hal::Test::BlinkyTask led_task{LED{pin}, ms_blinky};
+    StatsTask stats_task{};
 
     FreeRTOS::Kernel::startScheduler();
     return 0;

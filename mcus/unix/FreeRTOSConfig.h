@@ -11,12 +11,15 @@
 #define configMINIMAL_STACK_SIZE                ( ( unsigned short ) 128 )
 #define configTOTAL_HEAP_SIZE                   ( ( size_t ) ( 65536 * 100 ) )
 #define configMAX_TASK_NAME_LEN                 ( 16 )
-#define configUSE_TRACE_FACILITY                0
+#define configUSE_TRACE_FACILITY                1
 #define configUSE_16_BIT_TICKS                  0
 #define configIDLE_SHOULD_YIELD                 1
 
-
+#define INCLUDE_uxTaskGetStackHighWaterMark     1
 #define INCLUDE_vTaskDelay                      1
+#define INCLUDE_vTaskDelayUntil                 1
+ 
+
 /* POSIX port specific settings */
 #define configUSE_POSIX_COND_ATTR               1
 

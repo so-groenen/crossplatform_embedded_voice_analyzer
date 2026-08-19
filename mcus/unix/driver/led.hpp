@@ -3,6 +3,7 @@
 
 #include "FreeRTOS/Mutex.hpp"
 #include "embedded_hal/traits.hpp"
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <print>
@@ -22,6 +23,12 @@ namespace System
         {
             mutex.lock();
             std::println(fmt, std::forward<Args>(args)...);
+            mutex.unlock();
+        }
+         void do_locked(std::invocable auto&& f)
+        {
+            mutex.lock();
+            f();
             mutex.unlock();
         }
     };

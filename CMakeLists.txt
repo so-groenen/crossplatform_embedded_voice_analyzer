@@ -25,6 +25,7 @@ endif()
 # RTOS C 
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rtos)
 # target_link_libraries(my_proj PRIVATE rtos)
+set(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Cpp/FreeRTOS-Cpp)
 # RTOS CPP
