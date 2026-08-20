@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(unix_basic VERSION 0.1.0 LANGUAGES C CXX)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(unix_basic 
     main.cpp
     cpu/cpu.cpp)
 
+ 
 # FreeRTOS needs access to its configuration file
 target_include_directories(unix_basic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
  

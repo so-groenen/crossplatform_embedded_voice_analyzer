@@ -45,7 +45,7 @@ public:
     SmartMalloc(const SmartMalloc& other) = delete;
     SmartMalloc& operator=(const SmartMalloc& other) = delete;
     
-    SmartMalloc( SmartMalloc&& other)
+    SmartMalloc(SmartMalloc&& other)
         : m_data{other.m_data}
     {
         other.m_data = nullptr;
@@ -91,12 +91,8 @@ public:
     {}
     void taskFunction() override
     {
-        // TickType_t xLastWakeTime = xTaskGetTickCount();
-         // Track previous runtime counts across iterations for accurate deltas
-        
         static std::array<uint32_t, 16> u32LastTaskRunTimes{};
-        // static auto LastWallClock = std::chrono::steady_clock::now();
-
+ 
         while (true) 
         {
             delayUntil(pdMS_TO_TICKS(STATS_INTERVAL_MS));
@@ -109,11 +105,7 @@ public:
                 uint32_t ulTotalRunTime;
 
                 uxTaskCount = uxTaskGetSystemState(pxTaskStatusArray.data(), uxTaskCount, &ulTotalRunTime);
-
-                // Calculate exact elapsed wall-clock microseconds since last check
-                // auto CurrentWallClock = std::chrono::steady_clock::now();;
-                // auto Elapsed          = std::chrono::duration_cast<std::chrono::microseconds>(CurrentWallClock - LastWallClock).count();
-                // LastWallClock         = CurrentWallClock;
+ 
 
                 System::console.do_locked([]
                 {
@@ -133,7 +125,6 @@ public:
                     {
                         // Task index bounds safety
                         UBaseType_t tNum = pxTaskStatusArray[i].xTaskNumber;
- 
 
                         // Convert state enum to character flag
                         char cState = 'X';
@@ -171,13 +162,7 @@ public:
                             /*,u32CorePct*/ );
                     }
                     System::console.log("------------------------------------------------------\n");
-
-                // System::console.do_locked([&]
-                // {
-                //     std::println("------------------------------------------------------");
-                //     std::println("TOTAL DUAL-CORE LOAD (Max 200)             : {}", u32TotalCoreUsagePct);
-                //     std::println("======================================================\n");
-                // });
+ 
 
             }
         }

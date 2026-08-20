@@ -4,6 +4,7 @@
 #include "cpu/cpu.hpp"
 #include <cstddef>
 
+// External Interrupt (raising / falling edge etc)
 void EXTI0_ISR();
 constexpr size_t EXTI0_ISRn = 0;
 

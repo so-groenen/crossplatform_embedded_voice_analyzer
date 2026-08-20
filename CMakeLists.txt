@@ -1,46 +1,76 @@
 cmake_minimum_required(VERSION 3.10.0)
-project(CrossPlatformProject VERSION 0.1.0 LANGUAGES C CXX)
 
-# add_executable(my_proj main.cpp)
-
+# FreeRTOS target so it can find the correct config file
 add_library(freertos_config INTERFACE)
 
 
+set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel")
+set(FREERTOS_CPP_PATH "${CMAKE_CURRENT_SOURCE_DIR}//FreeRTOS-Cpp/FreeRTOS-Cpp")
+set(RP2350_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mcus/rp2350")
+set(UNIX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mcus/unix")
+
+#------------------------------------------------------------#
+#       Setting FreeRTOS ports depending on target arch!     #
+#------------------------------------------------------------#
 
 if(PLATFORM STREQUAL "MCU1")
+    
     message(DEBUG "MCU 1")
-elseif(PLATFORM STREQUAL "MCU2")
-    message(DEBUG "MCU 2")
-elseif(PLATFORM STREQUAL "UNIX")
-    message(DEBUG "UNIX")
 
-    target_include_directories(freertos_config INTERFACE 
-        "${CMAKE_CURRENT_SOURCE_DIR}/mcus/unix"
+elseif(PLATFORM STREQUAL "RP2350")
+
+    message(DEBUG "Using RP2350 port")
+    
+    # Choose your board & versions!
+    set(PICO_BOARD pico2_w CACHE STRING "Board type")
+    set(sdkVersion 2.2.0)
+    set(toolchainVersion 14_2_Rel1)
+    set(picotoolVersion 2.2.0-a4)
+    
+    target_include_directories(freertos_config SYSTEM INTERFACE  
+        "${RP2350_DIR}/config"
+    )
+    include(pico-freertos-setup.cmake)
+
+elseif(PLATFORM STREQUAL "UNIX")
+    
+    message(DEBUG "Using UNIX port")
+    target_include_directories(freertos_config SYSTEM INTERFACE  
+        "${UNIX_DIR}/config"
     )
     set(FREERTOS_PORT "GCC_POSIX" CACHE STRING "FreeRTOS Port Target")
     set(FREERTOS_HEAP "4" CACHE STRING "FreeRTOS Heap Implementation")
 endif()
 
 
-# RTOS C 
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rtos)
-# target_link_libraries(my_proj PRIVATE rtos)
-set(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Cpp/FreeRTOS-Cpp)
-# RTOS CPP
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rtos_cpp)
-# target_link_libraries(my_proj PRIVATE rtos-cpp)
+# Need to be called AFTER pico stuff, so that the compiler uses the correct target archi!
+project(CrossPlatformProject VERSION 0.1.0 LANGUAGES C CXX ASM)
 
-# API (Concepts + driver)
+#------------------------------------------------------------#
+#         include FreeRTOS & FreeRTOS-Cpp as library         #
+#------------------------------------------------------------#
+if(NOT PLATFORM STREQUAL "RP2350")
+    add_subdirectory(${FREERTOS_KERNEL_PATH})
+endif()
+add_subdirectory(${FREERTOS_CPP_PATH})
+ 
+
+#------------------------------------------------------------#
+#     Embedded-HAL CPP depends on FreerRTOS/FreeRTOS-Cpp     #
+#------------------------------------------------------------#
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/embedded_hal)
+
+
+#------------------------------------------------------------#
+#                   Add implementations                      #
+#------------------------------------------------------------#
 
 if(PLATFORM STREQUAL "MCU1")
     add_subdirectory(mcus/mcu1)
-elseif(PLATFORM STREQUAL "MCU2")
-    add_subdirectory(mcus/mcu2)
+elseif(PLATFORM STREQUAL "RP2350")
+    add_subdirectory(${RP2350_DIR})
 elseif(PLATFORM STREQUAL "UNIX")
-    add_subdirectory(mcus/unix)
+    add_subdirectory(${UNIX_DIR})
 endif()
 
  
