@@ -56,11 +56,16 @@ class IrqButton
     uint16_t m_pin{};
     uint32_t m_mode{};
     volatile bool m_has_fired{false};
+    FreeRTOS::Task* m_task{};
 public:
     explicit IrqButton(uint16_t pin, uint32_t mode);
     void set_mode(uint32_t new_mode);
     void await_isr();
     void handle_isr();
+    void set_task(FreeRTOS::Task* task)
+    {
+        m_task = task;
+    }
     bool has_fired() const
     {
         return m_has_fired;
@@ -107,13 +112,21 @@ void IrqButton::await_isr()
     }
     m_has_fired = false;
 }
+
 void IrqButton::handle_isr()
 {
-    // uint32_t event = ;
     if (gpio_get_irq_event_mask(m_pin) & m_mode) 
     {
         gpio_acknowledge_irq(m_pin, m_mode);
         m_has_fired = true;
+        if(m_task)
+        {
+            bool higherPriorityTaskWoken = false;
+            m_task->notifyGiveFromISR(higherPriorityTaskWoken);
+            if(higherPriorityTaskWoken)
+                FreeRTOS::Kernel::yield();
+        }
+            
     }
 }
 
@@ -121,12 +134,15 @@ class MyButtonTask : public FreeRTOS::Task
 {
     IrqButton m_btn{PIN_16, GPIO_IRQ_EDGE_FALL};
     pico2_w::WifiOutput m_led{};
-
+    bool m_use_notifs{};
 public:
-    MyButtonTask()
-      :  FreeRTOS::Task(tskIDLE_PRIORITY, 512, "blabla")
+    MyButtonTask(bool use_notifs = true)
+      :  FreeRTOS::Task(tskIDLE_PRIORITY, 512, "blabla"), m_use_notifs{use_notifs}
     {
         btn_ptr = &m_btn;
+
+        if(use_notifs)
+            m_btn.set_task(this);
     }
     void taskFunction() override
     {
@@ -136,11 +152,16 @@ public:
             {
                 m_led.toggle();
                 m_btn.reset_fired();
-                printf("click from tasl\n");
+                printf("click from task\n");
                 delay(pdMS_TO_TICKS(10)); 
             }
+
+            if(m_use_notifs)
+            {
+                notifyTake(); // will block until interrupt occur!
+                printf("notify taken \n");
+            }
         }
-        
     }
 };
 
@@ -153,8 +174,7 @@ int main()
 
     stdio_init_all();
     sleep_ms(1000);
-    printf("STARTING SCHEDULER\n");
-    
+     
 
     // for(size_t n = 5; n > 0; n--)
     // {
