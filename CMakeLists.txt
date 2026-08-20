@@ -31,7 +31,7 @@ elseif(PLATFORM STREQUAL "RP2350")
         "${RP2350_DIR}/config"
     )
     include(pico-freertos-setup.cmake)
-
+    
 elseif(PLATFORM STREQUAL "UNIX")
     
     message(DEBUG "Using UNIX port")
@@ -52,7 +52,6 @@ project(CrossPlatformProject VERSION 0.1.0 LANGUAGES C CXX ASM)
 if(NOT PLATFORM STREQUAL "RP2350")
     add_subdirectory(${FREERTOS_KERNEL_PATH})
 endif()
-add_subdirectory(${FREERTOS_CPP_PATH})
  
 
 #------------------------------------------------------------#
@@ -72,6 +71,7 @@ elseif(PLATFORM STREQUAL "RP2350")
 elseif(PLATFORM STREQUAL "UNIX")
     add_subdirectory(${UNIX_DIR})
 endif()
+add_subdirectory(${FREERTOS_CPP_PATH})
 
  
 

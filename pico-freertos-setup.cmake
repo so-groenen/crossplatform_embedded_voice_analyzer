@@ -42,9 +42,14 @@ else()
     message(WARNING "Unrecognized PICO_BOARD value: ${PICO_BOARD}")
 endif()
 
+
+
 include(${RP2350_DIR}/pico_sdk_import.cmake)
 include(${FREERTOS_KERNEL_PORT_PATH}/library.cmake)
 message(DEBUG "Using port: ${FREERTOS_KERNEL_PORT_PATH}")
+
+# Create alias so that libs depending on freertos_kernel can find it, because the rp2350 uses "FreeRTOS-Kernel" as target
+add_library(freertos_kernel ALIAS FreeRTOS-Kernel)
 
 
 if(${PICO_BOARD} STREQUAL "pico_w")

@@ -1,6 +1,7 @@
 BUILD_DIR      := build
-TARGET         := pico2-debug/rp2350_example
-BIN_IMAGE	   := $(BUILD_DIR)/mcus/rp2350/$(TARGET).elf 
+PRESET		   := pico2-debug
+TARGET         := rp2350_example
+BIN_IMAGE	   := $(BUILD_DIR)/$(PRESET)/mcus/rp2350/$(TARGET).elf 
 
 
 # OpenOCD stuff:
@@ -14,14 +15,8 @@ ADAPTER_SPEED  := 5000
 OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter speed $(ADAPTER_SPEED)"
 
 
-.PHONY: all build flash clean reset
+.PHONY: all flash clean reset
 
-# Default target compiles the project using standard CMake/Pico SDK workflows
-all: build
-
-build:
-	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && cmake .. && $(MAKE)
 
 # The manual flash command using OpenOCD and Linux binaries
 flash:

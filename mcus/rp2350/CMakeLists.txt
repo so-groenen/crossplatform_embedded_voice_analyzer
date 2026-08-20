@@ -25,9 +25,12 @@ target_link_libraries(rp2350_example
     pico_runtime
     pico_stdio_usb
     pico_cyw43_arch_none
-    FreeRTOS-Kernel-Heap4)
+    FreeRTOS-Kernel-Heap4
+    embedded_hal
+    FreeRTOS-Cpp)
 
 target_compile_options(rp2350_example PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
+target_compile_features(rp2350_example PRIVATE cxx_std_23)
 
 
 pico_add_extra_outputs(rp2350_example)
