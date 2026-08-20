@@ -15,6 +15,7 @@ ADAPTER_SPEED  := 5000
 OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter speed $(ADAPTER_SPEED)"
 
 
+
 .PHONY: all flash clean reset
 
 
@@ -24,6 +25,15 @@ flash:
 	@if [ ! -f $(BIN_IMAGE) ]; then echo "Error: Binary not found! Run 'make build' first."; exit 1; fi
 	@echo "Flashing $(BIN_IMAGE) to Raspberry Pi Pico..."
 	$(OPENOCD) $(OPENOCD_FLAGS) -c "program $(BIN_IMAGE) verify reset exit"
+
+
+# The manual flash command using OpenOCD and Linux binaries
+debug:
+	@echo "Checking for ELF binary at: $(BIN_IMAGE)"
+	@if [ ! -f $(BIN_IMAGE) ]; then echo "Error: Binary not found! Run 'make build' first."; exit 1; fi
+	@echo "Flashing $(BIN_IMAGE) to Raspberry Pi Pico..."
+	$(OPENOCD) $(OPENOCD_FLAGS) -c "init" -c "rp2350.cm0 configure -rtos FreeRTOS" -c "program $(BIN_IMAGE) verify reset"
+
 
 reset:
 	$(OPENOCD) $(OPENOCD_FLAGS) -c "init; reset; exit"
