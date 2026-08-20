@@ -15,6 +15,7 @@ add_executable(rp2350_example
 target_include_directories(rp2350_example PUBLIC 
     ${FREERTOS_KERNEL_PATH}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/config 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 pico_enable_stdio_usb(rp2350_example 1)

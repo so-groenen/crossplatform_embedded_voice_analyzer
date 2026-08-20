@@ -1,62 +1,41 @@
 
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <print>
 #include "pico/stdlib.h"
 #include "embedded_hal/traits.hpp"
-
+#include "drivers/gpio.hpp"
  
 
 
-#ifdef CYW43_WL_GPIO_LED_PIN
-    #include "pico/cyw43_arch.h"
-#endif
 
-int pico_led_init(void) 
+void test_gpio()
 {
-#ifdef CYW43_WL_GPIO_LED_PIN
-    return cyw43_arch_init();
-#else
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-#endif
+    using namespace pico2_w;
+
+
+    WifiOutput led{};
+    led.set_level(Level::High);
+    led.set_level(Level::Low);
+    led.toggle();
+
+    assert(led.is_set_high());
+    assert(led.get_out_put_level() == Level::High);
+
+
+    constexpr uint16_t ms_blinky{125};
+    embedded_hal::output::Test::BlinkyTask ledTask{led, ms_blinky};
+
+    printf("GPIO TEST OK \n");
 }
-
-void pico_set_led(bool led_on) {
-#ifdef CYW43_WL_GPIO_LED_PIN
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
-#else
-    gpio_put(PICO_DEFAULT_LED_PIN, led_on);
-#endif
-}
-
-class Cyw43Led 
-{
-public:
-    explicit Cyw43Led()
-    {
-        pico_led_init();
-    }
-    void set_high() 
-    {
-        pico_set_led(true);
-    }
-    void set_low() 
-    {
-        pico_set_led(false);
-    }
-};
-
-static_assert(embedded_hal::IsOutput<Cyw43Led>, "Cyw43Led must implement traits");
- 
 
 int main() 
 {
     stdio_init_all();
     printf("STARTING SCHEDULER\n");
 
-    constexpr uint16_t ms_blinky{250};
-    embedded_hal::Test::BlinkyTask ledTask{Cyw43Led{}, ms_blinky};
-
+    test_gpio();
     FreeRTOS::Kernel::startScheduler();
 
     while(1)

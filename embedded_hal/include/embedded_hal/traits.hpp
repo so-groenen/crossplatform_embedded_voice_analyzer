@@ -5,14 +5,25 @@
 #include <concepts>
 #include <cstdint>
  
-namespace embedded_hal
+namespace embedded_hal::output
 {
-template<class T>
-concept IsOutput = std::move_constructible<T> && requires (T g) 
-{
-    {g.set_high()} -> std::same_as<void>;
-    {g.set_low()} -> std::same_as<void>;
-};
+    enum class Level : bool 
+    {
+        Low = false,
+        High = true,
+    };
+
+    template<class T>
+    concept IsOutput = std::move_constructible<T> && requires (T g, Level level) 
+    {
+        {g.set_high()} -> std::same_as<void>;
+        {g.set_low()} -> std::same_as<void>;
+        {g.set_level(level)}-> std::same_as<void>;
+        {g.get_out_put_level()}-> std::same_as<Level>;
+        {g.is_set_high()} -> std::same_as<bool>;
+        {g.is_set_low()} -> std::same_as<bool>;
+        {g.toggle()} -> std::same_as<void>;
+    };
 
 
 
