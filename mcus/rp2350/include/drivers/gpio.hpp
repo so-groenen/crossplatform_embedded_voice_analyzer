@@ -9,7 +9,8 @@
     #include "pico/cyw43_arch.h"
 #endif
  
-
+// Main inspiration:
+// https://docs.embassy.dev/embassy-stm32/0.6.0/stm32c011d6/gpio/struct.Output.html
 
 #ifdef CYW43_WL_GPIO_LED_PIN
     constexpr uint DefaultPin = CYW43_WL_GPIO_LED_PIN;

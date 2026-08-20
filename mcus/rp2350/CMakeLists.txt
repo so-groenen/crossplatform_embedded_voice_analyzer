@@ -10,7 +10,9 @@ pico_sdk_init()
 
  
 add_executable(rp2350_example 
-    src/main.cpp)
+    src/main.cpp
+    src/drivers/exti.cpp
+    src/drivers/exti_handler.cpp)
 
 target_include_directories(rp2350_example PUBLIC 
     ${FREERTOS_KERNEL_PATH}/include
