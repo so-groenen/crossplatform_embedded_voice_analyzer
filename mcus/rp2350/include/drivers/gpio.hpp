@@ -18,16 +18,17 @@
     constexpr uint DefaultPin = PICO_DEFAULT_LED_PIN;
 #endif
 
+using namespace embedded_hal;
+
 
 namespace details 
 {
-using _Level = embedded_hal::gpio::Level;
 
 template <bool UseCyw43>
 class Output 
 {
     uint m_pin{};
-    _Level m_level{};
+    gpio::Level m_level{};
    
     inline void _put(bool led_on) 
     {
@@ -42,19 +43,19 @@ class Output
     }
 
 public:
-    Output(_Level level = _Level::Low) requires (!UseCyw43)
+    Output(gpio::Level level = gpio::Level::Low) requires (!UseCyw43)
         : m_pin{DefaultPin}, m_level{level}
     {
         gpio_init(DefaultPin);
         gpio_set_dir(DefaultPin, GPIO_OUT);
     }
 
-    Output(_Level level = _Level::Low) requires (UseCyw43)
+    Output(gpio::Level level = gpio::Level::Low) requires (UseCyw43)
         : m_pin{CYW43_WL_GPIO_LED_PIN}, m_level{level}
     {
         cyw43_arch_init();
     }
-    explicit Output(uint pin, _Level level = _Level::Low)  
+    explicit Output(uint pin, gpio::Level level = gpio::Level::Low)  
         : m_pin{pin}, m_level{level}
     {
         if constexpr (UseCyw43)
@@ -78,19 +79,19 @@ public:
     }
     void set_high() 
     {
-        m_level = _Level::High;
+        m_level = gpio::Level::High;
         _put(static_cast<bool>(m_level));
     }
     void set_low() 
     {
-        m_level = _Level::Low;
+        m_level = gpio::Level::Low;
         _put(static_cast<bool>(m_level));
     }
-    auto get_out_put_level() const -> _Level 
+    auto get_out_put_level() const -> gpio::Level 
     {
         return m_level;
     }
-    void set_level(_Level level)
+    void set_level(gpio::Level level)
     {
         if(static_cast<bool>(level))
             set_high();
@@ -99,7 +100,7 @@ public:
     }
     bool is_set_high() const
     {
-        return m_level == _Level::High;
+        return m_level == gpio::Level::High;
     }
     bool is_set_low() const
     {

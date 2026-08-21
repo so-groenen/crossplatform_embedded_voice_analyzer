@@ -18,7 +18,7 @@ OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter sp
 
 .PHONY: all flash clean reset build 
 all: build flash 
-
+ 
 build:
 	@cmake --build build/$(PRESET)
 

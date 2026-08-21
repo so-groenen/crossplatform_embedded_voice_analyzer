@@ -12,7 +12,7 @@
 
  
 using Level = embedded_hal::gpio::Level;
-// using Pull  = embedded_hal::gpio::Level
+using Pull  = embedded_hal::gpio::Pull;
 
 class ExtiInput
 {
@@ -22,7 +22,7 @@ class ExtiInput
     bool m_awaiting{};
     Level m_level{};
 public:
-    explicit ExtiInput(uint16_t pin, uint32_t mode, PicoTask* task, IExtiNotifier& irq);
+    explicit ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& irq, uint32_t mode = GPIO_IRQ_EDGE_FALL);
     void set_mode(uint32_t new_mode);
     uint16_t pin() const;
     uint32_t mode() const;
@@ -36,7 +36,11 @@ public:
     void wait_for_low();  // todo: add to hal
 
     // implement Input
-    bool is_high() const;
-    bool is_low() const;
+    bool is_high();
+    bool is_low();
+    Level get_level();
 };
+
+static_assert(embedded_hal::input::IsInput<ExtiInput>, "must implement Input traits");
+static_assert(embedded_hal::input::IsExtiInput<ExtiInput>, "must implement Exti traits");
 

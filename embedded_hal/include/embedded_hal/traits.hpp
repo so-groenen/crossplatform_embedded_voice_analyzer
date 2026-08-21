@@ -20,8 +20,8 @@ namespace embedded_hal
         enum class Pull : uint8_t 
         {
             None = 0,
-            Low = 1,
-            High = 2,
+            Down = 1,
+            Up = 2,
         };
     }
 
@@ -93,7 +93,8 @@ namespace input
     concept IsInput = std::move_constructible<T> && requires (T g) 
     {
         {g.is_high()} -> std::same_as<bool>;
-        {g.is_low()} -> std::same_as<void>;
+        {g.is_low()} -> std::same_as<bool>;
+        {g.get_level()} -> std::same_as<gpio::Level>;
     };
 }
 

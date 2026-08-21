@@ -11,10 +11,7 @@
 
 
 
-static inline embedded_hal::gpio::Level to_level(bool high)
-{
-    return high? embedded_hal::gpio::Level::High : embedded_hal::gpio::Level::Low;
-}
+ 
 
 void ExtiInput::set_mode(uint32_t new_mode)
 {
@@ -28,16 +25,27 @@ void ExtiInput::set_mode(uint32_t new_mode)
 }
 
 
-ExtiInput::ExtiInput(uint16_t pin, uint32_t mode, PicoTask* task, IExtiNotifier& notifier)
+ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& notifier, uint32_t mode)
     : m_pin{pin}, m_task{task}, m_mode{mode}
 {
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
-    gpio_pull_up(pin);
+
+    switch (pull)
+    {
+        case Pull::Up:
+            gpio_pull_up(pin);
+            break;
+        case Pull::Down:
+            gpio_pull_down(pin);
+            break;
+        case Pull::None:
+            gpio_set_pulls(pin, false, false);
+    }
 
     notifier.enable(this,task);
 
-    m_level = to_level(gpio_get_out_level(m_pin));
+    m_level = static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin));
 }
 bool ExtiInput::is_awaiting() const
 {
@@ -83,8 +91,7 @@ void ExtiInput::wait_for_high()
     if(m_mode != (GPIO_IRQ_LEVEL_HIGH))
         set_mode(GPIO_IRQ_LEVEL_HIGH);
 
-    m_level = to_level(gpio_get_out_level(m_pin));
-    if(static_cast<bool>(m_level))
+    if(is_high())
         return;
 
     m_awaiting = true;
@@ -97,8 +104,7 @@ void ExtiInput::wait_for_low()
     if(m_mode != (GPIO_IRQ_LEVEL_LOW))
         set_mode(GPIO_IRQ_LEVEL_LOW);
 
-    m_level = to_level(gpio_get_out_level(m_pin));
-    if(!static_cast<bool>(m_level))
+    if(is_low())
         return;
     
     m_awaiting = true;
@@ -107,11 +113,16 @@ void ExtiInput::wait_for_low()
 }
 
 
-bool ExtiInput::is_high() const
+bool ExtiInput::is_high()
 {
-    return gpio_get_out_level(m_pin); 
+    return static_cast<bool>(get_level()); 
 }
-bool ExtiInput::is_low() const
+bool ExtiInput::is_low()
 {
-    return !is_high(); 
+    return !static_cast<bool>(get_level());
+}
+
+Level ExtiInput::get_level()
+{
+    return (m_level = static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin)));
 }

@@ -32,7 +32,7 @@ class MyButtonTask : public PicoTask
     pico2_w::WifiOutput m_led{};
 public:
     MyButtonTask()
-      :  PicoTask(tskIDLE_PRIORITY, 512, "blabla"), m_btn(PIN_16, GPIO_IRQ_EDGE_FALL, this, exti_irq)
+      :  m_btn(PIN_16, Pull::Up, this, exti_irq)
     {
     }
     void taskFunction() override

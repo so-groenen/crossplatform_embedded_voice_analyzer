@@ -34,7 +34,11 @@ public:
     {
         assert(handler && "handler must be valid");
     }
- 
+    
+    Notifier& operator()(PicoTask* task)
+    {
+        return *this;
+    }
     void enable(ExtiInput* btn, PicoTask* task) override
     {
         if(n_btns < N && btn && task)
