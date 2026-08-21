@@ -8,36 +8,70 @@ project(${PROJECT_NAME} LANGUAGES C CXX ASM)
 
 pico_sdk_init()
 
- 
-add_executable(rp2350_example 
-    src/main.cpp
-    src/drivers/exti.cpp
-)
+#------------------------------------------------------------#
+#     Interface / config lib so i can reuse it for tests     #
+#------------------------------------------------------------#
+add_library(rp2350_rtos_config INTERFACE)
 
-target_include_directories(rp2350_example PUBLIC 
+target_include_directories(rp2350_rtos_config INTERFACE 
     ${FREERTOS_KERNEL_PATH}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/config 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-pico_enable_stdio_usb(rp2350_example 1)
-pico_enable_stdio_uart(rp2350_example 0)
-
-
-target_link_libraries(rp2350_example 
+target_link_libraries(rp2350_rtos_config INTERFACE 
     pico_stdlib
     pico_runtime
     pico_stdio_usb
-    # pico_cyw43_arch_none
-
-    # need to check if new SDK is compatible with latest freertos ...
     pico_cyw43_arch_lwip_sys_freertos
     FreeRTOS-Kernel-Heap4
     embedded_hal
-    FreeRTOS-Cpp)
+    FreeRTOS-Cpp
+)
 
-target_compile_options(rp2350_example PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
-target_compile_features(rp2350_example PRIVATE cxx_std_23)
-# target_link_options(rp2350_example PRIVATE "-Wl,--undefined=uxTopUsedPriority")
+target_compile_options(rp2350_rtos_config INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
+target_compile_features(rp2350_rtos_config INTERFACE cxx_std_23)
 
-pico_add_extra_outputs(rp2350_example)
+
+option(BUILD_MAIN "Build the main application target" ON)
+option(BUILD_TESTS "Build the example test targets" ON)
+
+
+#------------------------------------------------------------#
+#    Setup pico & add config interface to examples & main    #
+#------------------------------------------------------------#
+function(configure_picor_rtos_target TARGET_NAME)
+    target_link_libraries(${TARGET_NAME} PRIVATE rp2350_rtos_config)
+    pico_enable_stdio_usb(${TARGET_NAME} 1)
+    pico_enable_stdio_uart(${TARGET_NAME} 0)
+    pico_add_extra_outputs(${TARGET_NAME})
+endfunction()
+
+
+
+if(BUILD_MAIN)
+    add_executable(rp2350_main 
+        src/main.cpp
+        src/drivers/exti.cpp
+    )
+    configure_picor_rtos_target(rp2350_main)
+endif()
+
+#-------------#
+#    Tests    #
+#-------------#
+if(BUILD_TESTS)
+
+    add_executable(test_output 
+        src/tests/output_test.cpp
+        src/drivers/exti.cpp
+    )
+    configure_picor_rtos_target(test_output)
+
+    add_executable(test_exti 
+        src/tests/exti_test.cpp 
+        src/drivers/exti.cpp
+    )
+    configure_picor_rtos_target(test_exti)
+endif()
+ 

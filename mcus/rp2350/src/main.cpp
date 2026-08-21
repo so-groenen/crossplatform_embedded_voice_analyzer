@@ -37,7 +37,6 @@ ThreadSafeCtx g_thread_safe_ctx{};
 class MyButtonTask : public PicoTask
 {
     ExtiInput m_btn;
-    pico2_w::WifiOutput m_led{};
 public:
     MyButtonTask()
       : PicoTask(1, stack_button, "button task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
@@ -102,7 +101,7 @@ class ButtonWaitForEdgeTask : public PicoTask
     ExtiInput m_btn;
 public:
     ButtonWaitForEdgeTask()
-      : PicoTask(1, 2048, "edge-task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
+      : PicoTask(1, 256, "edge-task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
     {
     }
 
@@ -113,7 +112,7 @@ public:
         {
             m_btn.wait_for_any_edge();
             m_led.toggle();
-            // delay(pdMS_TO_TICKS(200));
+
             g_thread_safe_ctx([]
             {
                 puts("Click!!");

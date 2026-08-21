@@ -1,6 +1,12 @@
+# Main:
+TARGET         := rp2350_main
+
+# Examples:
+# TARGET         := test_exti
+# TARGET         := test_output
+
 BUILD_DIR      := build
 PRESET		   := pico2-debug
-TARGET         := rp2350_example
 BIN_IMAGE	   := $(BUILD_DIR)/$(PRESET)/mcus/rp2350/$(TARGET).elf 
 
 
@@ -27,9 +33,9 @@ $(BIN_IMAGE):
 
 # The manual flash command using OpenOCD and Linux binaries
 flash: $(BIN_IMAGE)
-	@echo "Checking for ELF binary at: $(BIN_IMAGE)"
-	@if [ ! -f $(BIN_IMAGE) ]; then echo "Error: Binary not found! Run 'make build' first."; exit 1; fi
-	@echo "Flashing $(BIN_IMAGE) to Raspberry Pi Pico..."
+	echo "Checking for ELF binary at: $(BIN_IMAGE)"
+	if [ ! -f $(BIN_IMAGE) ]; then echo "Error: Binary not found! Run 'make build' first."; exit 1; fi
+	echo "Flashing $(BIN_IMAGE) to Raspberry Pi Pico..."
 	$(OPENOCD) $(OPENOCD_FLAGS) -c "program $(BIN_IMAGE) verify reset exit"
 
 

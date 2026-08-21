@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
+#include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/time.h>
 #include <stddef.h>
@@ -33,11 +34,15 @@ bind_interrupt_EXTI(exti_irq, exti_handler, num_buttons);
 
 ThreadSafeCtx g_thread_safe_ctx{};
  
+
+
+
 class CounterTask : public PicoTask
 {
+    uint32_t m_delay{};
 public:
-    CounterTask()
-      : PicoTask(1, stack_button, "counter-task")
+    CounterTask(uint32_t delay, const char* name)
+      : PicoTask(1, stack_button, name), m_delay{delay}
     {
     }
 
@@ -46,12 +51,12 @@ public:
         while(true)
         {
             static uint32_t counter = 0;
-            g_thread_safe_ctx([]
+            g_thread_safe_ctx([&]
             {
-                printf("Hello! counter = %u \n", counter);
+                printf("Hello (delay[%u ms])! counter = %u \n", m_delay, counter);
             });
             counter++;
-            delay(pdMS_TO_TICKS(250));
+            delay(pdMS_TO_TICKS(m_delay));
         }
     }
 };
@@ -59,19 +64,20 @@ public:
 class ButtonWaitForEdgeTask : public PicoTask
 {
     ExtiInput m_btn;
-    pico2_w::WifiOutput m_led{};
 public:
     ButtonWaitForEdgeTask()
-      : PicoTask(1, stack_button, "edge-task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
+      : PicoTask(1, 256, "edge-task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
     {
     }
 
     void taskFunction() override
     {
-           while(true)
+        pico2_w::WifiOutput m_led{}; // MUST BE CALLED INSIDE TASK, because it uses FreeRTOS tasks under the hood, and need schedueler to run
+        while(true)
         {
             m_btn.wait_for_any_edge();
             m_led.toggle();
+
             g_thread_safe_ctx([]
             {
                 puts("Click!!");
@@ -89,9 +95,10 @@ int main()
     stdio_init_all();
     // sleep_ms(1000);
      
-    static ButtonWaitForEdgeTask btn_task{};
-    static CounterTask counter_task{};
-    static StatsTask stats{};
+    ButtonWaitForEdgeTask btn_task{};
+    CounterTask counter_task1{400, "cnt-task2"};
+    CounterTask counter_task2{1200, "cnt-task1"};
+    StatsTask stats{};
     FreeRTOS::Kernel::startScheduler();
     while(1)
     {
