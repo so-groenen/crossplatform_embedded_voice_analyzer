@@ -26,7 +26,7 @@ OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter sp
 all: build flash 
  
 build:
-	@cmake --build build/$(PRESET)
+	@cmake --build build/$(PRESET) --target $(TARGET)
 
 $(BIN_IMAGE):
 	build  

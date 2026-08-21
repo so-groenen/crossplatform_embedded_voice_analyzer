@@ -27,6 +27,8 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     FreeRTOS-Kernel-Heap4
     embedded_hal
     FreeRTOS-Cpp
+    hardware_spi 
+    hardware_dma
 )
 
 target_compile_options(rp2350_rtos_config INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
