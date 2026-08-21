@@ -16,11 +16,17 @@ OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter sp
 
 
 
-.PHONY: all flash clean reset
+.PHONY: all flash clean reset build 
+all: build flash 
 
+build:
+	@cmake --build build/$(PRESET)
+
+$(BIN_IMAGE):
+	build  
 
 # The manual flash command using OpenOCD and Linux binaries
-flash:
+flash: $(BIN_IMAGE)
 	@echo "Checking for ELF binary at: $(BIN_IMAGE)"
 	@if [ ! -f $(BIN_IMAGE) ]; then echo "Error: Binary not found! Run 'make build' first."; exit 1; fi
 	@echo "Flashing $(BIN_IMAGE) to Raspberry Pi Pico..."

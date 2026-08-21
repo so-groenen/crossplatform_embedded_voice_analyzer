@@ -11,8 +11,10 @@ pico_sdk_init()
  
 add_executable(rp2350_example 
     src/main.cpp
-    src/drivers/exti.cpp
-    src/drivers/exti_handler.cpp)
+    # src/wrk.cpp
+    # src/drivers/exti.cpp
+    # src/drivers/exti_handler.cpp
+)
 
 target_include_directories(rp2350_example PUBLIC 
     ${FREERTOS_KERNEL_PATH}/include
@@ -20,13 +22,14 @@ target_include_directories(rp2350_example PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-pico_enable_stdio_usb(rp2350_example 1)
+pico_enable_stdio_usb(rp2350_example 0)
+pico_enable_stdio_uart(rp2350_example 1)
 
 
 target_link_libraries(rp2350_example 
     pico_stdlib
     pico_runtime
-    pico_stdio_usb
+    # pico_stdio_usb
     pico_cyw43_arch_none
     FreeRTOS-Kernel-Heap4
     embedded_hal
@@ -34,6 +37,6 @@ target_link_libraries(rp2350_example
 
 target_compile_options(rp2350_example PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
 target_compile_features(rp2350_example PRIVATE cxx_std_23)
-
+target_link_options(rp2350_example PRIVATE "-Wl,--undefined=uxTopUsedPriority")
 
 pico_add_extra_outputs(rp2350_example)
