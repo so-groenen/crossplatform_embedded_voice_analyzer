@@ -80,7 +80,7 @@ public:
 
 
 IrqButton* btn_ptr{};
-void my_handler()
+void my_button_handler()
 {
     if(btn_ptr)
         btn_ptr->handle_isr();
@@ -94,7 +94,7 @@ IrqButton::IrqButton(uint16_t pin, uint32_t mode, TaskType* task = nullptr)
     gpio_set_dir(pin, GPIO_IN);
     gpio_pull_up(pin);
 
-    gpio_add_raw_irq_handler(m_pin, &my_handler);
+    gpio_add_raw_irq_handler(m_pin, &my_button_handler);
     gpio_set_irq_enabled(m_pin, m_mode, true);
     irq_set_enabled(IO_IRQ_BANK0, true);
 
