@@ -12,8 +12,8 @@ public:
         :  FreeRTOS::Task(priority, stackDepth, name)
     {
     }
-    // inline void notifyTake() const 
-    // {
-    //     notifyTake();
-    // }
+    void awaitNotifs() const 
+    {
+        notifyTake();
+    }
 };

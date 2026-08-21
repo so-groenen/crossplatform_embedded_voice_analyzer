@@ -21,7 +21,7 @@
 
 namespace details 
 {
-using _Level = embedded_hal::output::Level;
+using _Level = embedded_hal::gpio::Level;
 
 template <bool UseCyw43>
 class Output 
@@ -42,7 +42,7 @@ class Output
     }
 
 public:
-    Output(embedded_hal::output::Level level = _Level::Low) requires (!UseCyw43)
+    Output(_Level level = _Level::Low) requires (!UseCyw43)
         : m_pin{DefaultPin}, m_level{level}
     {
         gpio_init(DefaultPin);
@@ -119,7 +119,7 @@ static_assert(embedded_hal::output::IsOutput<Output<true>>, "Output must impleme
 #ifdef CYW43_WL_GPIO_LED_PIN
 namespace pico2_w 
 {
-    using Level      = embedded_hal::output::Level;
+    using Level      = embedded_hal::gpio::Level;
     using WifiOutput = details::Output<true>;
     using Output     = details::Output<false>;
 }

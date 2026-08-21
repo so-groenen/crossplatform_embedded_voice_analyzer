@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.10.0)
 # FreeRTOS target so it can find the correct config file
 add_library(freertos_config INTERFACE)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel")
 set(FREERTOS_CPP_PATH "${CMAKE_CURRENT_SOURCE_DIR}//FreeRTOS-Cpp/FreeRTOS-Cpp")
