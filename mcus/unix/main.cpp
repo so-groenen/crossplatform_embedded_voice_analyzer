@@ -109,7 +109,7 @@ int main()
     
     CPUTask cpu_task{}; // listens to hardware_events, triggers nvic interrut
 
-    embedded_hal::Test::BlinkyTask led_task{LED{pin}, ms_blinky};
+    embedded_hal::output::Test::BlinkyTask led_task{LED{pin}, ms_blinky};
     Test::UnixTask task1{ms_unix};
     Test::ButtonTask btn_task{1000};
     StatsTask stats_task{};

@@ -25,9 +25,14 @@ elseif(PLATFORM STREQUAL "RP2350")
     
     # Choose your board & versions!
     set(PICO_BOARD pico2_w CACHE STRING "Board type")
-    set(sdkVersion 2.2.0)
-    set(toolchainVersion 14_2_Rel1)
-    set(picotoolVersion 2.2.0-a4)
+
+    set(sdkVersion 2.3.0)
+    set(toolchainVersion 15_2_Rel1)
+    set(picotoolVersion 2.3.0)
+
+    # set(sdkVersion 2.2.0)
+    # set(toolchainVersion 14_2_Rel1)
+    # set(picotoolVersion 2.2.0-a4)
     
     target_include_directories(freertos_config SYSTEM INTERFACE  
         "${RP2350_DIR}/config"

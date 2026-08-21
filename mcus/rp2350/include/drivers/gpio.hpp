@@ -21,43 +21,46 @@
 
 using namespace embedded_hal;
 
-
 namespace details 
 {
+    // workaround for freeRTOS cyw43: cache last setting, and return if asked.
+    inline bool __cyw43_led_state;
 
 template <bool UseCyw43>
 class Output 
 {
     uint m_pin{};
-    gpio::Level m_level{};
+    // gpio::Level m_level{};
    
     inline void _put(bool led_on) 
     {
         if constexpr (UseCyw43)
         {
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
+            // __cyw43_led_state = led_on;
         }
         else  
         {
             gpio_put(m_pin, led_on);
         }
     }
-
 public:
     Output(gpio::Level level = gpio::Level::Low) requires (!UseCyw43)
-        : m_pin{DefaultPin}, m_level{level}
+        : m_pin{DefaultPin}//, m_level{level}
     {
         gpio_init(DefaultPin);
         gpio_set_dir(DefaultPin, GPIO_OUT);
+        _put(static_cast<bool>(level));
     }
 
     Output(gpio::Level level = gpio::Level::Low) requires (UseCyw43)
-        : m_pin{CYW43_WL_GPIO_LED_PIN}, m_level{level}
+        : m_pin{CYW43_WL_GPIO_LED_PIN} //, m_level{level}
     {
         cyw43_arch_init();
+        _put(static_cast<bool>(level));
     }
     explicit Output(uint pin, gpio::Level level = gpio::Level::Low)  
-        : m_pin{pin}, m_level{level}
+        : m_pin{pin}//, m_level{level}
     {
         if constexpr (UseCyw43)
         {
@@ -77,21 +80,27 @@ public:
             gpio_set_dir(pin, GPIO_OUT);
         }
         
-        set_level(m_level);
+        _put(static_cast<bool>(level));
     }
     void set_high() 
     {
-        m_level = gpio::Level::High;
-        _put(static_cast<bool>(m_level));
+        // m_level = gpio::Level::High;
+        _put(static_cast<bool>(gpio::Level::High));
     }
     void set_low() 
     {
-        m_level = gpio::Level::Low;
-        _put(static_cast<bool>(m_level));
+        _put(static_cast<bool>(gpio::Level::Low));
     }
     auto get_output_level() const -> gpio::Level 
     {
-        return m_level;
+        if constexpr (UseCyw43)
+        {
+            // return static_cast<gpio::Level>(__cyw43_led_state);
+            return static_cast<gpio::Level>(cyw43_arch_gpio_get(CYW43_WL_GPIO_LED_PIN));
+        }
+            
+
+        return static_cast<gpio::Level>(gpio_get_out_level(m_pin));
     }
     void set_level(gpio::Level level)
     {
@@ -102,7 +111,10 @@ public:
     }
     bool is_set_high() const
     {
-        return m_level == gpio::Level::High;
+        if constexpr (UseCyw43)
+            return cyw43_arch_gpio_get(CYW43_WL_GPIO_LED_PIN);
+
+        return gpio_get_out_level(m_pin);
     }
     bool is_set_low() const
     {

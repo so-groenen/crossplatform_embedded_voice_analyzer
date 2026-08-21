@@ -78,7 +78,7 @@ class StatsTask : public FreeRTOS::Task
 {
 public:
     StatsTask()
-    :     FreeRTOS::Task(tskIDLE_PRIORITY, 256, "stats-task")
+    :     FreeRTOS::Task(tskIDLE_PRIORITY, 512, "stats-task")
     {}
     void taskFunction() override
     {
