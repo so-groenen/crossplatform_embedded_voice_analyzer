@@ -45,7 +45,6 @@ ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& not
 
     notifier.enable(this,task);
 
-    m_level = static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin));
 }
 bool ExtiInput::is_awaiting() const
 {
@@ -63,7 +62,7 @@ void ExtiInput::wait_for_rising_edge()
 {
     if(m_mode != GPIO_IRQ_EDGE_RISE)
         set_mode(GPIO_IRQ_EDGE_RISE);
-    // task_await();
+
     m_awaiting = true;
     m_task->awaitNotifs();
     m_awaiting = false;
@@ -72,6 +71,7 @@ void ExtiInput::wait_for_falling_edge()
 {
     if(m_mode != GPIO_IRQ_EDGE_FALL)
         set_mode(GPIO_IRQ_EDGE_FALL);
+
     m_awaiting = true;
     m_task->awaitNotifs();
     m_awaiting = false;
@@ -113,16 +113,16 @@ void ExtiInput::wait_for_low()
 }
 
 
-bool ExtiInput::is_high()
+bool ExtiInput::is_high() const
 {
-    return static_cast<bool>(get_level()); 
+    return gpio_get(m_pin); 
 }
-bool ExtiInput::is_low()
+bool ExtiInput::is_low() const
 {
-    return !static_cast<bool>(get_level());
+    return !gpio_get(m_pin);
 }
 
-Level ExtiInput::get_level()
+Level ExtiInput::get_level() const
 {
-    return (m_level = static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin)));
+    return (static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin)));
 }

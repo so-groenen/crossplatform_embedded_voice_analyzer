@@ -37,12 +37,13 @@ namespace System
     inline Console console{};
 };
 
+using embedded_hal::gpio::Level;
 
- 
 
 class LED 
 {
     uint16_t m_pin{INACTIVE_PIN};
+    Level m_level{};
 public:
     explicit LED(uint16_t pin)
         : m_pin(pin)
@@ -66,24 +67,47 @@ public:
         }
         return *this;
     }
-    
+    void set_level(Level level)
+    {
+        if(static_cast<bool>(level))
+            set_high();
+        else  
+            set_low();
+    }
+    Level get_output_level() const 
+    {
+        return m_level;
+    }
 
     void set_high()
     {
         System::console.log("LED Is On");
+        m_level = Level::High;
+    }
+    void toggle()
+    {
+        is_set_high() ? set_low() : set_high();
     }
     void set_low()
     {
         System::console.log("LED Is Off");
+        m_level = Level::Low;
     }
-
+    bool is_set_high() const 
+    {
+        return (bool)m_level;
+    }
+    bool is_set_low() const
+    {
+        return (bool)m_level;
+    }
     ~LED()
     {   
 
     }
 };
 
-static_assert(embedded_hal::IsOutput<LED>, "mus be Output");
+static_assert(embedded_hal::output::IsOutput<LED>, "must be Output");
 
 
 #endif

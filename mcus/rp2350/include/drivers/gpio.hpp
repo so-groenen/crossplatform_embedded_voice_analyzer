@@ -3,6 +3,7 @@
 
 #include "pico/stdlib.h"
 #include "embedded_hal/traits.hpp"
+#include <hardware/gpio.h>
 
 
 #ifdef CYW43_WL_GPIO_LED_PIN
@@ -75,6 +76,7 @@ public:
             gpio_init(pin);
             gpio_set_dir(pin, GPIO_OUT);
         }
+        
         set_level(m_level);
     }
     void set_high() 
@@ -87,7 +89,7 @@ public:
         m_level = gpio::Level::Low;
         _put(static_cast<bool>(m_level));
     }
-    auto get_out_put_level() const -> gpio::Level 
+    auto get_output_level() const -> gpio::Level 
     {
         return m_level;
     }

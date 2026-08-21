@@ -34,7 +34,7 @@ namespace embedded_hal
             {g.set_high()} -> std::same_as<void>;
             {g.set_low()} -> std::same_as<void>;
             {g.set_level(level)}-> std::same_as<void>;
-            {g.get_out_put_level()}-> std::same_as<gpio::Level>;
+            {g.get_output_level()}-> std::same_as<gpio::Level>;
             {g.is_set_high()} -> std::same_as<bool>;
             {g.is_set_low()} -> std::same_as<bool>;
             {g.toggle()} -> std::same_as<void>;
@@ -44,7 +44,6 @@ namespace embedded_hal
 
     namespace Test
     {
-
         template<IsOutput LedType>
         class BlinkyTask : public FreeRTOS::Task
         {
@@ -64,39 +63,37 @@ namespace embedded_hal
                     m_led.set_low();
                     FreeRTOS::Task::delay(pdMS_TO_TICKS(m_ms_blink));       
                 }
-
             }
         };
-
     }//Test
 }// output
 
 
 namespace input 
 {
-    // enum class Pull 
-    // {
-    //     PullUp, 
-    //     PullDown, 
-    //     Floating,
-    // };
-
-    template<class T>
-    concept IsExtiInput = std::move_constructible<T> && requires (T g) 
+    template<class InputType>
+    concept IsExtiInput = std::move_constructible<InputType> && requires (InputType g) 
     {
         {g.is_awaiting()} -> std::same_as<bool>;
         {g.wait_for_rising_edge()} -> std::same_as<void>;
         {g.wait_for_falling_edge()}-> std::same_as<void>;
         {g.wait_for_any_edge()}-> std::same_as<void>;
+        {g.wait_for_high()}-> std::same_as<void>;
+        {g.wait_for_low()}-> std::same_as<void>;
     };
-    template<class T>
-    concept IsInput = std::move_constructible<T> && requires (T g) 
+
+    template<class InputType>
+    concept IsInput = std::move_constructible<InputType> && requires (InputType g) 
     {
         {g.is_high()} -> std::same_as<bool>;
         {g.is_low()} -> std::same_as<bool>;
         {g.get_level()} -> std::same_as<gpio::Level>;
     };
+
+
 }
+
+
 
 }
 #endif 
