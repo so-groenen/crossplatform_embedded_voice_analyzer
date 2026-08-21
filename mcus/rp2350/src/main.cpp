@@ -53,9 +53,14 @@ using TaskType =  FreeRTOS::Task;
   
 void my_button_handler();
 
+class IrqButton;
 
-template<size_t N>
-class Notifier;
+class IIRQNotifier
+{
+    public:
+        virtual ~IIRQNotifier() = default;
+        virtual void enable(IrqButton* btn, TaskType* task) = 0;
+};
 
 class IrqButton
 {
@@ -64,7 +69,7 @@ class IrqButton
     volatile bool m_has_fired{false};
     TaskType* m_task{};
 public:
-    explicit IrqButton(uint16_t pin, uint32_t mode, TaskType* task);
+    explicit IrqButton(uint16_t pin, uint32_t mode, TaskType* task, IIRQNotifier& irq);
     void set_mode(uint32_t new_mode);
     void await_falling_edge();
     void handle_isr();
@@ -76,10 +81,6 @@ public:
     {
         return m_mode;
     }
-    // void set_task(FreeRTOS::Task* task)
-    // {
-    //     m_task = task;
-    // }
     bool has_fired() const
     {
         return m_has_fired;
@@ -98,7 +99,7 @@ public:
 
 
 template<size_t N>
-class Notifier 
+class Notifier : public IIRQNotifier
 {
     std::array<IrqButton*, N> m_buttons{};
     std::array<TaskType*, N> m_tasks{};
@@ -126,7 +127,7 @@ public:
         assert(handler && "handler must be valid");
     }
  
-    void enable_button(IrqButton* btn, TaskType* task)
+    void enable(IrqButton* btn, TaskType* task) override
     {
         if(n_btns < N && btn && task)
         {
@@ -153,46 +154,35 @@ public:
     }
 };
 
+#define bind_interrupt(irq_num, handler_name, notifier_id) \
+    void handler_name();                                          \
+    static Notifier<notifier_id> irq_num{handler_name};           \
+    void handler_name() {                                         \
+        irq_num.handle_isr();                                     \
+    }
 
-void my_notifier_handler();
-
-static Notifier<2> irq_notifier{my_notifier_handler};
-
-
-// static Notifier<2> irq{my_isr_handler};
-
-void my_notifier_handler()
-{
-    irq_notifier.handle_isr();
-}
+bind_interrupt(exti_irq, exti_handler, 2);
 
 
-// static IrqButton* btn_ptr{};
- 
+// void my_notifier_handler();
 
-// void my_button_handler()
+// static Notifier<2> irq_notifier{my_notifier_handler};
+
+
+// void my_notifier_handler()
 // {
-//     if(btn_ptr)
-//     {
-//         btn_ptr->handle_isr();
-//     }
+//     irq_notifier.handle_isr();
 // }
 
-
-IrqButton::IrqButton(uint16_t pin, uint32_t mode, TaskType* task)
+ 
+IrqButton::IrqButton(uint16_t pin, uint32_t mode, TaskType* task, IIRQNotifier& notifier)
     : m_pin{pin}, m_mode(mode), m_task(task)
 {
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
     gpio_pull_up(pin);
 
- 
-    irq_notifier.enable_button(this, task);
-    // btn_ptr = this;
-
-    // gpio_add_raw_irq_handler(m_pin, my_handler);
-    // gpio_set_irq_enabled(m_pin, m_mode, true);
-    // irq_set_enabled(IO_IRQ_BANK0, true);
+    notifier.enable(this, task);
 }
 void IrqButton::set_mode(uint32_t new_mode)
 {
@@ -230,15 +220,8 @@ class MyButtonTask : public PicoTask
     pico2_w::WifiOutput m_led{};
 public:
     MyButtonTask()
-      :  PicoTask(tskIDLE_PRIORITY, 512, "blabla"), m_btn(PIN_16, GPIO_IRQ_EDGE_FALL, this)
+      :  PicoTask(tskIDLE_PRIORITY, 512, "blabla"), m_btn(PIN_16, GPIO_IRQ_EDGE_FALL, this, exti_irq)
     {
-        // btn_ptr = &m_btn;
-        // for(size_t n = 0; n < 10; n++)
-        // {
-        //     m_led.toggle();
-        //     sleep_ms(250);
-        // }
-        // task_ptr = this;
     }
     void taskFunction() override
     {
