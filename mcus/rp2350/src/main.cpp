@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
+#include <hardware/regs/intctrl.h>
+#include <limits>
 #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/time.h>
@@ -42,7 +44,13 @@
 // ThreadSafeCtx g_thread_safe_ctx{};
 
  
+struct SpiConfig 
+{
+    uint32_t frequency;
+    uint32_t phase;
+    uint32_t polarity;
 
+};
 
 
 #define TEST_SIZE 1024
@@ -53,57 +61,108 @@ enum class DmaDir
     Rx
 };
 
-class SpiDMA 
+class Dma;
+
+// unblock threads from interrupts
+// should have pointer to thread
+// and to Dma to acknowledge interrupt;
+// also enable interrupt
+// class DmaNotifier; 
+// {
+
+// };
+ 
+class IDmaIrqHandler
 {
-    uint m_dma{};
-    dma_channel_config m_config{};
-    spi_inst_t* m_spi{};
 public:
-    SpiDMA(spi_inst_t* spi)
-        : m_dma(dma_claim_unused_channel(true)), m_config{dma_channel_get_default_config(m_dma)}, m_spi{spi}//, m_buffer(buffer)
+    virtual ~IDmaIrqHandler() = default;
+    // virtual void enable_interrupt() = 0;
+    virtual void enable_interrupt(Dma* dma) = 0;
+};
+
+class Dma 
+{
+    uint m_dma{};// requires(hasDMA);
+    dma_channel_config m_config{};
+    // irq_num_rp2350 m_dma_irq{};
+    static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
+public:
+    explicit Dma()
+        : m_dma(dma_claim_unused_channel(true)), m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
         channel_config_set_transfer_data_size(&m_config, DMA_SIZE_8);
     }
 
-    void enable_interrupt(irq_handler_t handler)
+    explicit Dma(IDmaIrqHandler& irq_handler)
+        : m_dma(dma_claim_unused_channel(true)), m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
-        dma_channel_set_irq0_enabled(m_dma, true);
-
-        // Register our callback function to the CPU vector table for DMA_IRQ_0
-        irq_set_exclusive_handler(DMA_IRQ_0, handler);
-        irq_set_enabled(DMA_IRQ_0, true);
+        channel_config_set_transfer_data_size(&m_config, DMA_SIZE_8);
+        irq_handler.enable_interrupt(this);
+        // enable_interrupt(handler);
     }
-    void disable_interrupt()
+    Dma(const Dma& other) = delete;
+    Dma& operator=(Dma& other) = delete;
+
+    Dma(Dma&& other)
+        : m_dma{other.m_dma}, m_config{other.m_config}//, m_dma_irq{other.m_dma_irq}
     {
-        irq_set_enabled(DMA_IRQ_0, false);
-        dma_channel_set_irq0_enabled(m_dma, false);
-        irq_set_enabled(DMA_IRQ_0, true);
+        // make it faulty to avoid freeing!
+        other.m_dma = moved_dma_channel;
+    }
+    Dma& operator=(Dma&& other)
+    {
+        if(&other != this)
+        {
+            m_dma       = other.m_dma;
+            other.m_dma = moved_dma_channel;
+
+            m_config  = other.m_config;
+            // m_dma_irq = other.m_dma_irq;
+        }
+        return *this;
     }
 
-    void prepare_tx(uint8_t* buff_to_send, size_t len)
-    {   
-        channel_config_set_dreq(&m_config, spi_get_dreq(m_spi, true));
+    
+
+    // void enable_interrupt(irq_handler_t handler)
+    // {
+    //     dma_channel_set_irq0_enabled(m_dma_irq, true);
+
+    //     // Register our callback function to the CPU vector table for DMA_IRQ_0
+    //     irq_set_exclusive_handler(m_dma_irq, handler);
+    //     irq_set_enabled(m_dma_irq, true);
+    // }
+    // void disable_interrupt()
+    // {
+    //     irq_set_enabled(m_dma_irq, false);
+    //     dma_channel_set_irq0_enabled(m_dma_irq, false);
+    //     irq_set_enabled(m_dma_irq, true);
+    // }
+    // read from SRAM memory and write it to write_addr (for ex SPI's FIFO / Data register or another memory location)
+
+    void write(std::span<uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
+    {
+        channel_config_set_dreq(&m_config, dreq);
         // Default:
-        // channel_config_set_read_increment(&m_config, true);
-        // channel_config_set_write_increment(&m_config, false);
+        channel_config_set_read_increment(&m_config, true);
+        channel_config_set_write_increment(&m_config, false);
         dma_channel_configure(m_dma, &m_config,
-                                &spi_get_hw(m_spi)->dr, // write address
-                                buff_to_send,                 // read address from memory
-                                len,                          // element count (each element is of size transfer_data_size)
-                                false);                       // don't start yet
-
+                                write_addr,           // write address
+                                buff_to_send.data(),  // read address from memory
+                                buff_to_send.size(),  // element count (each element is of size transfer_data_size)
+                                start);     
     }
-    void prepare_rx(uint8_t* buff_for_rx, size_t len)
+    // read from read_addr (for ex Spi-data register) and write into rx_buffer
+    void read(std::span<uint8_t> rx_buff, const volatile void * read_addr, uint dreq, bool start)
     {
-        channel_config_set_dreq(&m_config, spi_get_dreq(m_spi, /*is_tx=*/false));
+        channel_config_set_dreq(&m_config, dreq);
         channel_config_set_read_increment(&m_config, false);
         channel_config_set_write_increment(&m_config, true);
         dma_channel_configure(m_dma, &m_config,
-                            buff_for_rx,                  // write address in memory
-                            &spi_get_hw(m_spi)->dr, // read from periph address
-                            len,                          // m_spi count (each element is of size transfer_data_size)
-                            false);                       // don't start yet
- 
+                            rx_buff.data(),            // write address in memory
+                            read_addr,                 // read from periph address
+                            rx_buff.size(),            // m_spi count (each element is of size transfer_data_size)
+                            false);                    // don't start yet
     }
     void start()
     {
@@ -121,11 +180,12 @@ public:
     {
         return dma_channel_is_busy(m_dma);
     }
-    ~SpiDMA()
+    ~Dma()
     {
-        dma_channel_unclaim(m_dma);
+        if(m_dma != moved_dma_channel)
+            dma_channel_unclaim(m_dma);
     }
-    static void start_multiple(std::span<SpiDMA*> instances)
+    static void start_multiple(std::span<Dma*> instances)
     {
         uint32_t mask = 0;
         for(const auto& s : instances)
@@ -134,28 +194,159 @@ public:
         }
         dma_start_channel_mask(mask);
     }
-    void acknowledge_irq()
+    void handle_isr()
+    {
+        if(is_irq_event_core0())
+        {
+            acknowledge_irq_core0();
+            printf(">>> Hello from interrupt!\n");
+        }
+    }
+    void acknowledge_irq_core0()
     {
         dma_hw->ints0 = (1u << m_dma);
     }
-    bool is_irq_event() const
+    bool is_irq_event_core0() const
     {
         return (dma_hw->ints0 & (1u << m_dma));
     } 
+    // friend class IDmaIrqHandler;
 };
 
-SpiDMA* rx_ptr{};
-static bool has_fired{};
+
+class DmaIrqHandler : public IDmaIrqHandler
+{
+    irq_handler_t m_handler{};
+    irq_num_rp2350 m_irqn{};
+    uint m_dma_chan{};
+    // std::array<Dma*, 5> m_dma_insts
+
+    void acknowledge_irq_core0()
+    {
+        dma_hw->ints0 = (1u << m_dma_chan);
+    }
+    bool is_irq_event_core0() const
+    {
+        return (dma_hw->ints0 & (1u << m_dma_chan));
+    } 
+public:
+    explicit DmaIrqHandler(irq_handler_t handler, irq_num_rp2350 irqn)
+        : m_handler(handler), m_irqn(irqn)
+    {
+    }
+    void enable_interrupt(Dma* dma) override
+    {
+        m_dma_chan = dma->channel();
+        dma_channel_set_irq0_enabled(m_dma_chan, true);
+        
+        // Register our callback function to the CPU vector table for DMA_IRQ_0 etc...
+        irq_set_exclusive_handler(m_irqn, m_handler);
+        irq_set_enabled(m_irqn, true);
+    }
+    void handle_isr()
+    {
+        if(is_irq_event_core0())
+        {
+            acknowledge_irq_core0();
+            printf(">>> Hello from interrupt!\n");
+        }
+    }
+
+    // void disable_interrupt()
+    // {
+    //     irq_set_enabled(m_dma_irq, false);
+    //     dma_channel_set_irq0_enabled(m_dma_chan, false);
+    //     irq_set_enabled(m_dma_irq, true);
+    // }
+};
+
+
+
+class SpiAsync
+{
+    Dma m_dma;
+    spi_inst_t* m_spi{};
+public:
+    SpiAsync(spi_inst_t* spi, Dma dma)
+        : m_dma{std::move(dma)}, m_spi{spi}//, m_buffer(buffer)
+    {
+    }
+    void write_async(std::span<uint8_t> buff_to_send, bool start)
+    {   
+        m_dma.write(buff_to_send, &spi_get_hw(m_spi)->dr, spi_get_dreq(m_spi, true), start);
+    }
+    void expose_dma(Dma*& other)
+    {
+        other = &m_dma;
+    }
+    void read_async(std::span<uint8_t> rx_buff, bool start)
+    {
+        m_dma.read(rx_buff, &spi_get_hw(m_spi)->dr, spi_get_dreq(m_spi, /*is_tx=*/false), start);
+    }
+    void start()
+    {
+        m_dma.start();
+    }
+    uint channel() const 
+    {
+        return m_dma.channel();
+    }
+    void await_blocking()
+    {
+        return m_dma.await_blocking();
+    }
+    bool is_busy() const 
+    {
+        return m_dma.is_busy();
+    }
+    static void start_multiple(std::span<SpiAsync*> instances)
+    {
+        uint32_t mask = 0;
+        for(const auto& s : instances)
+        {
+            mask |= (1u << s->channel());
+        }
+        dma_start_channel_mask(mask);
+    }
+};
+
+// class Handler;
+
+Dma* dma_rx_ptr{};
+// static bool has_fired{};
 
 void rx_spi_isr()
 {
-    if (rx_ptr->is_irq_event())
+    if (dma_rx_ptr->is_irq_event_core0())
     {
-        rx_ptr->acknowledge_irq();
-        has_fired = true;
+        dma_rx_ptr->acknowledge_irq_core0();
+        // has_fired = true;
         printf(" >>*<< \n");
     }
 }
+
+
+// void my_dma_isr();
+
+// static DmaIrqHandler dma_irq_handler{my_dma_isr, DMA_IRQ_0};
+
+// void my_dma_isr()
+// {
+//     dma_irq_handler.handle_isr();
+// }
+
+// bind_interrupt_DMA(dma_rx, rx_handler, DMA_IRQ_0);
+
+
+#define bind_interrupt_DMA(irqs, handler_name, IRQ_n)              \
+    void handler_name();                                           \
+    [[maybe_unused]] static DmaIrqHandler irqs{handler_name, IRQ_n}; \
+    void handler_name() {                                          \
+        irqs.handle_isr();                                         \
+    }                                           
+
+bind_interrupt_DMA(dma_irqs, my_handler, DMA_IRQ_0);
+
 
 int main() 
 {
@@ -193,12 +384,9 @@ int main()
     }
 
      
+    SpiAsync spi_tx{spi_default, Dma{}};
+    SpiAsync spi_rx{spi_default, Dma{dma_irqs}};
 
-    SpiDMA spi_tx{spi_default};
-    SpiDMA spi_rx{spi_default};
-
-    rx_ptr = &spi_rx;
-    rx_ptr->enable_interrupt(rx_spi_isr);
 
     sleep_ms(3000);
     printf("STARTING NOW\n");
@@ -215,27 +403,20 @@ int main()
     while(true)
     {
         printf("Configure TX DMA\n");
-        spi_tx.prepare_tx(txbuf, TEST_SIZE);
+        spi_tx.write_async(txbuf, false);
  
         printf("Configure RX DMA\n");
-        spi_rx.prepare_rx(rxbuf, TEST_SIZE);
+        spi_rx.read_async(rxbuf, false);
 
         printf("Starting DMAs...\n");
         // start them exactly simultaneously to avoid races (in extreme cases the FIFO could overflow)
 
-        SpiDMA* instances[] = {&spi_rx, &spi_tx};
-        SpiDMA::start_multiple(instances);
+        SpiAsync* instances[] = {&spi_rx, &spi_tx};
+        SpiAsync::start_multiple(instances);
 
         printf("Wait for RX complete...\n");
         spi_rx.await_blocking();
 
-        while(!has_fired)
-        {
-
-        }
-        has_fired = false;
-
-        printf("has_fired == true!\n");
 
         if (spi_tx.is_busy())
         {
