@@ -33,7 +33,7 @@
 
 #include "drivers/pico_task.hpp"
 
-#include "drivers/dma_raw.hpp"
+#include "drivers/dma.hpp"
 
 
 
@@ -50,20 +50,28 @@ public:
     
 };
 
+// class IAsyncReadWrite 
+// {
+// public:
+//     virtual ~IAsyncReadWrite() = default;
+//     virtual void write_async(std::span<uint8_t> buff_to_send, bool start) = 0;
+//     virtual void read_async(std::span<uint8_t> rx_buff, bool start) = 0;
+// };
 
-class SpiDMA : public SpiRaw
+class SpiDMA : public SpiRaw //, public IAsyncReadWrite
 {
-    DmaRaw m_dma;
+protected:
+    Dma m_dma;
 public:
-    SpiDMA(spi_inst_t* spi, DmaRaw dma)
+    SpiDMA(spi_inst_t* spi, Dma dma)
         : SpiRaw(spi), m_dma{std::move(dma)}//, m_buffer(buffer)
     {
     }
-    void write_async(std::span<uint8_t> buff_to_send, bool start)
+    void write_async(std::span<uint8_t> buff_to_send, bool start)// override
     {   
         m_dma.write(buff_to_send, &spi_get_hw(m_spi)->dr, spi_get_dreq(m_spi, true), start);
     }
-    void read_async(std::span<uint8_t> rx_buff, bool start)
+    void read_async(std::span<uint8_t> rx_buff, bool start)// override
     {
         m_dma.read(rx_buff, &spi_get_hw(m_spi)->dr, spi_get_dreq(m_spi, /*is_tx=*/false), start);
     }
@@ -94,5 +102,29 @@ public:
     }
 };
  
+
+
+
+class SpiRTOS : public SpiDMA 
+{
+    PicoTask& m_task;
+public:
+    SpiRTOS(spi_inst_t* spi, Dma dma, PicoTask* task, rtos::IDmaIrqHandler& irq)
+        : SpiDMA(spi, std::move(dma)), m_task{*task}//, m_buffer(buffer)
+    {
+        irq.enable_interrupt(&m_dma, task);
+    }
+    void write(std::span<uint8_t> buff_to_send)  
+    {   
+        write_async(buff_to_send, true);
+        m_task.awaitNotifs();
+    }
+    void read(std::span<uint8_t> rx_buff)  
+    {
+        read_async(rx_buff, true);
+        m_task.awaitNotifs();
+    }
+     
+};
 
  

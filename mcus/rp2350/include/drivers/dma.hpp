@@ -1,13 +1,8 @@
 #pragma once
 
 
-#include <algorithm>
-#include <array>
 #include <cassert>
-#include <concepts>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/regs/intctrl.h>
@@ -20,202 +15,97 @@
 #include <pico/types.h>
 #include <span>
 #include <stddef.h>
-// #include "pico/stdlib.h"
-// #include "embedded_hal/traits.hpp"
-#include "FreeRTOS/Kernel.hpp"
  
-
-#include "drivers/interface_dma_irq_handler.hpp"
-#include "embedded_hal/heapless.hpp"
-#include "pico/binary_info.h"
-#include "hardware/spi.h"
 #include "hardware/dma.h"
-
-#include "drivers/pico_task.hpp"
-
-#include "drivers/dma_raw.hpp"
-
  
-// unblock threads from interrupts
-// should have pointer to thread
-// and to Dma to acknowledge interrupt;
-// also enable interrupt
-
-// namespace base
-// {
-//     class IDmaIrqHandler
-//     {
-//     public:
-//         virtual ~IDmaIrqHandler() = default;
-//         // virtual void enable_interrupt() = 0;
-//         virtual void enable_interrupt(DmaRaw* dma) = 0;
-//         virtual void handle_isr() = 0;
-//     };
-// }
-
-// namespace rtos 
-// {
-//     class IDmaIrqHandler : public base::IDmaIrqHandler
-//     {
-//     public:
-//         virtual ~IDmaIrqHandler() = default;
-//         // virtual void enable_interrupt() = 0;
-//         virtual void enable_interrupt(DmaRaw* dma, PicoTask* task) = 0;
-//     };
-// }
-
-  
-namespace base 
+class Dma
 {
-    class Dma : public DmaRaw
+protected:
+    uint m_dma{}; 
+    dma_channel_config m_config{};
+    static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
+public:
+    explicit Dma(uint channel)
+        : m_dma{channel}, m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
-    public:
-        explicit Dma(uint channel, base::IDmaIrqHandler& irq_handler)
-            : DmaRaw(channel)
+        dma_channel_claim(m_dma);
+        channel_config_set_transfer_data_size(&m_config, DMA_SIZE_8);
+    }
+    Dma(const Dma& other) = delete;
+    Dma& operator=(Dma& other) = delete;
+
+    Dma(Dma&& other)
+        : m_dma{other.m_dma}, m_config{other.m_config}//, m_dma_irq{other.m_dma_irq}
+    {
+        // make it faulty to avoid freeing!
+        other.m_dma = moved_dma_channel;
+    }
+    Dma& operator=(Dma&& other)
+    {
+        if(&other != this)
         {
-            irq_handler.enable_interrupt(this);
+            m_dma       = other.m_dma;
+            other.m_dma = moved_dma_channel;
+
+            m_config  = other.m_config;
+            // m_dma_irq = other.m_dma_irq;
         }
-    };
-}
+        return *this;
+    }
 
-
-
-// enum class DmaIrq : uint32_t
-// {
-//     IRQ_0 = DMA_IRQ_0,
-//     IRQ_1 = DMA_IRQ_1, 
-//     IRQ_2 = DMA_IRQ_2,
-//     IRQ_3 = DMA_IRQ_3,
-// };
- 
-// using embedded_hal::heapless::Vector;
-
-// namespace base   
-// {
-
-// template<DmaIrq IRQ_n, size_t N_Channels>
-// class DmaIrqHandler: public base::IDmaIrqHandler
-// {
-// public:
-//     irq_handler_t m_handler{};
-//     Vector<uint, N_Channels> m_dma_channels{};
-//     // std::array<Dma*, 5> m_dma_insts
-//     bool is_event(size_t n) const
-//     {
-//         if constexpr (IRQ_n == DmaIrq::IRQ_0)
-//         {
-//             return(dma_hw->ints0 & (1u << m_dma_channels[n]));
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_1)
-//         {
-//             return(dma_hw->ints1 & (1u << m_dma_channels[n]));
-
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_2)
-//         {
-//             return(dma_hw->ints2 & (1u << m_dma_channels[n]));
-
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_3)
-//         {
-//             return(dma_hw->ints3 & (1u << m_dma_channels[n]));
-//         }
-//     }
-//     void acknowledge_isr(size_t n)
-//     {
-//         if constexpr (IRQ_n == DmaIrq::IRQ_0)
-//         {
-//             dma_hw->ints0 = (1u << m_dma_channels[n]);
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_1)
-//         {
-//             dma_hw->ints1 = (1u << m_dma_channels[n]);
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_2)
-//         {
-//             dma_hw->ints2 = (1u << m_dma_channels[n]);
-//         }
-//         else if constexpr (IRQ_n == DmaIrq::IRQ_3)
-//         {
-//             dma_hw->ints3 = (1u << m_dma_channels[n]);
-//         }
-//     }
-// public:
-//     explicit DmaIrqHandler(irq_handler_t handler)
-//         : m_handler(handler)//, m_irqn(irqn)
-//     {
-//     }
-//     void enable_interrupt(DmaRaw* dma) override
-//     {
-//         m_dma_channels.push_back(dma->channel());
-//         dma_channel_set_irq0_enabled(dma->channel(), true);
-        
-//         // Register our callback function to the CPU vector table for DMA_IRQ_0 etc...
-//         irq_set_exclusive_handler(static_cast<uint32_t>(IRQ_n), m_handler);
-//         irq_set_enabled(static_cast<uint32_t>(IRQ_n), true);
-//     }
-//     void handle_isr() override
-//     {   
-//         for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-//         {
-//             if(this->is_event(n))
-//             {
-//                 printf(">>>> HEEEEEEEEEEEEEEEEEEEEEEEEEEINNNN \n");
-//                 this->acknowledge_isr(n);
-//             }
-//         }
-//     }
-// };
-// }
-
-
-
-
-// namespace RTOS 
-// {
-// template<DmaIrq IRQ_n, size_t N>
-// class DmaIrqHandler : public base::DmaIrqHandler<IRQ_n, N> , public rtos::IDmaIrqHandler
-// {
-//     Vector<PicoTask*, N> m_tasks{};
-// public:
-//     explicit DmaIrqHandler(irq_handler_t handler)
-//         : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
-//     {
-//     }
-//     void enable_interrupt(DmaRaw* dma, PicoTask* task)
-//     {
-//         enable_interrupt(dma);
-//         if(!m_tasks.push_back(task))
-//             panic("DMA handler: Task overflow!");
-//         if (m_tasks.size() != this->m_dma_channels.size())
-//             panic("DMA handler: Task vs DMA channel mismatch!");
-//     }
-//     void handle_isr() override
-//     {   
-//         for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-//         {
-//             if(this->is_event(n))
-//             {
-//                 this->acknowledge_isr(n);
-//                 if(this->m_tasks[0])
-//                 {
-//                     bool xHigherPriorityTaskWoken{};
-//                     this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
-//                     if(xHigherPriorityTaskWoken)
-//                         FreeRTOS::Kernel::yield();
-//                 }
-//             }
-//         }
-//     }
- 
-//     // void disable_interrupt()
-//     // {
-//     //     irq_set_enabled(m_dma_irq, false);
-//     //     dma_channel_set_irq0_enabled(m_dma_chan, false);
-//     //     irq_set_enabled(m_dma_irq, true);
-//     // }
-// };
-// }
-
-
+    void write(std::span<uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
+    {
+        channel_config_set_dreq(&m_config, dreq);
+        // Default:
+        channel_config_set_read_increment(&m_config, true);
+        channel_config_set_write_increment(&m_config, false);
+        dma_channel_configure(m_dma, &m_config,
+                                write_addr,           // write address
+                                buff_to_send.data(),  // read address from memory
+                                buff_to_send.size(),  // element count (each element is of size transfer_data_size)
+                                start);     
+    }
+    // read from read_addr (for ex Spi-data register) and write into rx_buffer
+    void read(std::span<uint8_t> rx_buff, const volatile void * read_addr, uint dreq, bool start)
+    {
+        channel_config_set_dreq(&m_config, dreq);
+        channel_config_set_read_increment(&m_config, false);
+        channel_config_set_write_increment(&m_config, true);
+        dma_channel_configure(m_dma, &m_config,
+                            rx_buff.data(),            // write address in memory
+                            read_addr,                 // read from periph address
+                            rx_buff.size(),            // m_spi count (each element is of size transfer_data_size)
+                            false);                    // don't start yet
+    }
+    void start()
+    {
+        dma_channel_start(m_dma);
+    }
+    uint channel() const 
+    {
+        return m_dma;
+    }
+    void await_blocking()
+    {
+        dma_channel_wait_for_finish_blocking(m_dma);
+    }
+    bool is_busy() const 
+    {
+        return dma_channel_is_busy(m_dma);
+    }
+    ~Dma()
+    {
+        if(m_dma != moved_dma_channel)
+            dma_channel_unclaim(m_dma);
+    }
+    static void start_multiple(std::span<Dma*> instances)
+    {
+        uint32_t mask = 0;
+        for(const auto& s : instances)
+        {
+            mask |= (1u << s->m_dma);
+        }
+        dma_start_channel_mask(mask);
+    }
+};
   

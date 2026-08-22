@@ -30,7 +30,7 @@
 #include "hardware/dma.h"
 
 #include "drivers/pico_task.hpp"
-#include "drivers/dma_raw.hpp"
+#include "drivers/dma.hpp"
 
  
 // unblock threads from interrupts
@@ -108,7 +108,7 @@ public:
         : m_handler(handler)//, m_irqn(irqn)
     {
     }
-    void enable_interrupt(DmaRaw* dma) override
+    void enable_interrupt(Dma* dma) override
     {
         m_dma_channels.push_back(dma->channel());
         dma_channel_set_irq0_enabled(dma->channel(), true);
@@ -145,7 +145,7 @@ public:
         : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
-    void enable_interrupt(DmaRaw* dma, PicoTask* task)
+    void enable_interrupt(Dma* dma, PicoTask* task)
     {
         enable_interrupt(dma);
         if(!m_tasks.push_back(task))

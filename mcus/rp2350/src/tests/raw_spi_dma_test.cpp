@@ -23,7 +23,7 @@
 #include "stats.hpp"
  
   
-#include "drivers/dma_raw.hpp"
+#include "drivers/dma.hpp"
 #include "drivers/dma_irq_handler.hpp"
 #include "drivers/spi.hpp"
 
@@ -32,11 +32,11 @@
   
 
  
-class DmaEnabledIRQ : public DmaRaw
+class DmaEnabledIRQ : public Dma
 {
 public:
     explicit DmaEnabledIRQ(uint channel, base::IDmaIrqHandler& irq_handler)
-        : DmaRaw(channel)
+        : Dma(channel)
     {
         irq_handler.enable_interrupt(this);
     }
@@ -81,7 +81,7 @@ int main()
     constexpr uint DMA_CH1{1};
     
     SpiDMA spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, dma_irqs}};
-    SpiDMA spi_tx{spi_default, DmaRaw{DMA_CH1}};
+    SpiDMA spi_tx{spi_default, Dma{DMA_CH1}};
 
 
     sleep_ms(3000);

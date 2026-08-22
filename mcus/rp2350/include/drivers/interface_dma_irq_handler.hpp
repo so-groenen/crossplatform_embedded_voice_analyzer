@@ -31,7 +31,7 @@
 #include "hardware/dma.h"
 
 #include "drivers/pico_task.hpp"
-#include "drivers/dma_raw.hpp"
+#include "drivers/dma.hpp"
 
  
 // unblock threads from interrupts
@@ -47,7 +47,7 @@ namespace base
     public:
         virtual ~IDmaIrqHandler() = default;
         // virtual void enable_interrupt() = 0;
-        virtual void enable_interrupt(DmaRaw* dma) = 0;
+        virtual void enable_interrupt(Dma* dma) = 0;
         virtual void handle_isr() = 0;
     };
 }
@@ -59,7 +59,7 @@ namespace rtos
     public:
         virtual ~IDmaIrqHandler() = default;
         // virtual void enable_interrupt() = 0;
-        virtual void enable_interrupt(DmaRaw* dma, PicoTask* task) = 0;
+        virtual void enable_interrupt(Dma* dma, PicoTask* task) = 0;
     };
 }
 
