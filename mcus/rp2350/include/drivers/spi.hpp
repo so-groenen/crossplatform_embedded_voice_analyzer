@@ -116,7 +116,7 @@ public:
     SpiRTOS(spi_inst_t* spi, Dma dma, PicoTask* task, rtos::IDmaIrqHandler& irq)
         : SpiDMA(spi, std::move(dma)), m_task{*task}//, m_buffer(buffer)
     {
-        irq.setup_interrupt(&m_dma, task);
+        irq.enable_interrupt_from_rtos(&m_dma, task);
     }
     void await_write(std::span<uint8_t> buff_to_send)  
     {   

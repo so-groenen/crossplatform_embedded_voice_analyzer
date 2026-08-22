@@ -39,7 +39,7 @@ public:
     {
         return *this;
     }
-    void enable(ExtiInput* btn, PicoTask* task) override
+    void enable_interrupt_from_rtos(ExtiInput* btn, PicoTask* task) override
     {
         if(n_btns < N && btn && task)
         {

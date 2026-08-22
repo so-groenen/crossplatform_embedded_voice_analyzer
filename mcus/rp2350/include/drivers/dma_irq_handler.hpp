@@ -145,7 +145,7 @@ public:
         : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
-    void setup_interrupt(Dma* dma, PicoTask* task) override
+    void enable_interrupt_from_rtos(Dma* dma, PicoTask* task) override
     {
         this->enable_interrupt(dma);
         if(!m_tasks.push_back(task))

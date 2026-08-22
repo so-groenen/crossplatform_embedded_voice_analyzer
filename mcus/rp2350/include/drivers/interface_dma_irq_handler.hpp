@@ -59,7 +59,7 @@ namespace rtos
     public:
         virtual ~IDmaIrqHandler() = default;
         // virtual void enable_interrupt() = 0;
-        virtual void setup_interrupt(Dma* dma, PicoTask* task) = 0;
+        virtual void enable_interrupt_from_rtos(Dma* dma, PicoTask* task) = 0;
     };
 }
 

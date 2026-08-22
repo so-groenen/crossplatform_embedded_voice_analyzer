@@ -8,5 +8,5 @@ class IExtiNotifier
 {
     public:
         virtual ~IExtiNotifier() = default;
-        virtual void enable(ExtiInput* btn, PicoTask* task) = 0;
+        virtual void enable_interrupt_from_rtos(ExtiInput* btn, PicoTask* task) = 0;
 };
