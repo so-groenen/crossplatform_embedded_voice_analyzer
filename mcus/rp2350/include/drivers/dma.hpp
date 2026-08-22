@@ -62,7 +62,7 @@ public:
         dma_channel_configure(m_dma, &m_config,
                                 write_addr,           // write address
                                 buff_to_send.data(),  // read address from memory
-                                dma_encode_transfer_count(buff_to_send.size()),  // element count (each element is of size transfer_data_size)
+                                buff_to_send.size(),  // element count (each element is of size transfer_data_size)
                                 start);     
     }
     // read from read_addr (for ex Spi-data register) and write into rx_buffer
@@ -74,7 +74,7 @@ public:
         dma_channel_configure(m_dma, &m_config,
                             rx_buff.data(),            // write address in memory
                             read_addr,                 // read from periph address
-                            dma_encode_transfer_count(rx_buff.size()),            // m_spi count (each element is of size transfer_data_size)
+                             rx_buff.size(),            // m_spi count (each element is of size transfer_data_size)
                                 start);                    // don't start yet
     }
     void start()

@@ -127,7 +127,7 @@ public:
     HelloDmaRtosTask()
         : PicoTask(1, 512, "DMA-test-task")
     {
-        spi_init(spi_default, 1000 * 1000);
+        // spi_init(spi_default, 1000 * 1000);
         gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
         gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
         gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
@@ -146,14 +146,20 @@ public:
 
         constexpr uint DMA_CH0{0};
         constexpr uint DMA_CH1{1};
-        
 
-        SpiRTOS spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};  // calls the the ISR which can unblock the thread
+        // using spi::rtos::SpiAsync;
+        // using spi::Mode;
+
+        // SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};
+
+        // SpiRTOS spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};  // calls the the ISR which can unblock the thread
+        SpiDMA  spi_rx{spi_default, Dma{DMA_CH0}};
         SpiDMA  spi_tx{spi_default, Dma{DMA_CH1}};                  // transfer silently
  
 
+
         Rtos_sleep_ms(3000);
-        printf("-- DMA TRANSFER STARTING NOW\n");
+        printf("-- DMA TRANSFER STARTING NOW [baudrate:%u]\n", spi_rx.baudrate());
         Rtos_sleep_ms(3000);
 
         // We set the outbound DMA to transfer from a memory buffer to the SPI transmit FIFO paced by the SPI TX FIFO DREQ
@@ -162,11 +168,23 @@ public:
         while(true)
         {
             printf("Wait for RX complete...\n");
-            spi_tx.write_async(txbuf, true);    // Launch DMA channel 0 to transfer data to spi
-            spi_rx.await_read(rxbuf);           // start reading and block the thread ...
+            // spi_tx.write_async(txbuf, true);    // Launch DMA channel 0 to transfer data to spi
+            // spi_rx.await_read(rxbuf);           // start reading and block the thread ...
                                                 // when all data has been recieved, the ISR will unblock the thread!
 
-            if (spi_tx.is_busy())
+            if(!dma_channel_is_claimed(DMA_CH0))
+                panic("channel 0 not claimed");
+
+            if(!dma_channel_is_claimed(DMA_CH1))
+                panic("channel 1 not claimed");
+
+            
+            spi_tx.write_async(txbuf, false);
+            spi_rx.read_async(rxbuf, false);
+            Dma* arr[] = {&spi_rx.dma(), &spi_tx.dma()};
+            Dma::start_multiple(arr);
+
+            if (spi_tx.dma().is_busy())
             {
                 panic("RX completed before TX");
             }

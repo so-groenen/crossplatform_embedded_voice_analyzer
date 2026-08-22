@@ -62,14 +62,16 @@ int main()
     printf("SPI DMA example\n");
 
 //     // Enable SPI at 1 MHz and connect to GPIOs
-    spi_init(spi_default, 1000 * 1000);
     gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
     gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
     gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
     gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
 
+    spi_init(spi_default, 1000 * 1000);
     
+    // vvv needs to be called AFTER. calling init again will clear it......
     hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
+    
 
     static uint8_t txbuf[TEST_SIZE];
     static uint8_t rxbuf[TEST_SIZE];
@@ -80,8 +82,11 @@ int main()
     constexpr uint DMA_CH0{0};
     constexpr uint DMA_CH1{1};
     
-    SpiDMA spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, dma_irqs}};
-    SpiDMA spi_tx{spi_default, Dma{DMA_CH1}};
+    SpiDMA spi_rx{spi_default, Dma{DMA_CH0}};
+    SpiDMA spi_tx{spi_default, DmaEnabledIRQ{DMA_CH1, dma_irqs}};
+
+
+
 
 
     sleep_ms(3000);
@@ -111,10 +116,10 @@ int main()
         SpiDMA::start_multiple(instances);
 
         printf("Wait for RX complete...\n");
-        spi_rx.await_blocking();
+        spi_rx.dma().await_blocking();
 
 
-        if (spi_tx.is_busy())
+        if (spi_tx.dma().is_busy())
         {
             panic("RX completed before TX");
         }
