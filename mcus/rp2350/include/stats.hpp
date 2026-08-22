@@ -78,7 +78,7 @@ class StatsTask : public FreeRTOS::Task
 {
 public:
     StatsTask()
-    :     FreeRTOS::Task(tskIDLE_PRIORITY, 512, "stats-task")
+    :     FreeRTOS::Task(tskIDLE_PRIORITY +1, 512, "stats-task")
     {}
     void taskFunction() override
     {
@@ -98,14 +98,14 @@ public:
                 uxTaskCount = uxTaskGetSystemState(pxTaskStatusArray.data(), uxTaskCount, &ulTotalRunTime);
  
 
-                g_thread_safe_ctx([]{
+                // g_thread_safe_ctx([]{
                     printf("\n==================== SYSTEM STATS ====================\n");
                     printf("Free Heap           : %zu bytes\n", xPortGetFreeHeapSize());
                     printf("Minimum Ever Free   : %zu bytes\n", xPortGetMinimumEverFreeHeapSize());
                     printf("------------------------------------------------------\n");
                     printf("Task          State  Prio  Stack  Num  Affinity  %% Core\n");
                     printf("------------------------------------------------------\n");
-                });
+                // });
                     uint32_t u32TotalCoreUsagePct = 0;
 
                     for (UBaseType_t i = 0; i < uxTaskCount; i++) 
@@ -139,14 +139,14 @@ public:
                                 break;
                         }
                     
-                    g_thread_safe_ctx([&]{
+                    // g_thread_safe_ctx([&]{
                         printf("%-13s %c     %2lu    %5u  %2lu  \n", 
                             pxTaskStatusArray[i].pcTaskName,
                             cState, pxTaskStatusArray[i].uxCurrentPriority,
                             pxTaskStatusArray[i].usStackHighWaterMark, 
                             pxTaskStatusArray[i].xTaskNumber
                         );
-                    });
+                    // });
                             // pxTaskStatusArray[i].pcTaskName,
                             // cState, 
                             // pxTaskStatusArray[i].uxCurrentPriority,

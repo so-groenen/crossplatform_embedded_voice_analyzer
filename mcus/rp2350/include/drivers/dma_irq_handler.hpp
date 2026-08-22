@@ -134,7 +134,7 @@ public:
 
 
 
-namespace RTOS 
+namespace rtos 
 {
 template<DmaIrq IRQ_n, size_t N>
 class DmaIrqHandler : public base::DmaIrqHandler<IRQ_n, N> , public rtos::IDmaIrqHandler
@@ -145,9 +145,9 @@ public:
         : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
-    void enable_interrupt(Dma* dma, PicoTask* task)
+    void setup_interrupt(Dma* dma, PicoTask* task) override
     {
-        enable_interrupt(dma);
+        this->enable_interrupt(dma);
         if(!m_tasks.push_back(task))
             panic("DMA handler: Task overflow!");
         if (m_tasks.size() != this->m_dma_channels.size())
@@ -162,6 +162,7 @@ public:
                 this->acknowledge_isr(n);
                 if(this->m_tasks[0])
                 {
+                    printf(" >>> Hello from RTOS DMA Handler!\n");
                     bool xHigherPriorityTaskWoken{};
                     this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
                     if(xHigherPriorityTaskWoken)

@@ -54,12 +54,12 @@ namespace base
 
 namespace rtos 
 {
-    class IDmaIrqHandler : public base::IDmaIrqHandler
+    class IDmaIrqHandler //: public base::IDmaIrqHandler
     {
     public:
         virtual ~IDmaIrqHandler() = default;
         // virtual void enable_interrupt() = 0;
-        virtual void enable_interrupt(Dma* dma, PicoTask* task) = 0;
+        virtual void setup_interrupt(Dma* dma, PicoTask* task) = 0;
     };
 }
 

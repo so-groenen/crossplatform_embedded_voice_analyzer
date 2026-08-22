@@ -14,4 +14,4 @@ public:
     }
 };
 
-extern ThreadSafeCtx g_thread_safe_ctx;
+// extern ThreadSafeCtx g_thread_safe_ctx;

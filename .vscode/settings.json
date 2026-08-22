@@ -1,4 +1,3 @@
 {
     "cortex-debug.armToolchainPath": "/home/so/.pico-sdk/toolchain/14_2_Rel1/bin",
-    "cortex-debug.showRTOS": true
 }

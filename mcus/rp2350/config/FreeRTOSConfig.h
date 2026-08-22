@@ -114,5 +114,11 @@
 #define INCLUDE_xTaskResumeFromISR              1
   
 /* A header file that defines trace macro can be included here. */
+#define vPortSVCHandler       isr_svcall
+#define xPortPendSVHandler    isr_pendsv
+#define xPortSysTickHandler   isr_systick
+#define configTASK_RETURN_ADDRESS    NULL
+
+
 
 #endif /* FREERTOS_CONFIG_H */

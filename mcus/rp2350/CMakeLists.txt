@@ -30,8 +30,10 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     hardware_spi 
     hardware_dma
 )
+set(CMAKE_BUILD_TYPE Debug)
 
-target_compile_options(rp2350_rtos_config INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile>)
+
+target_compile_options(rp2350_rtos_config INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile> -Og -g3)
 target_compile_features(rp2350_rtos_config INTERFACE cxx_std_23)
 
 
@@ -70,6 +72,7 @@ if(BUILD_TESTS)
     )
     configure_picor_rtos_target(test_output)
 
+    
     add_executable(test_exti 
         src/tests/exti_test.cpp 
         src/drivers/exti.cpp

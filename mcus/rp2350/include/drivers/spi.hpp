@@ -91,6 +91,10 @@ public:
     {
         return m_dma.is_busy();
     }
+    Dma* dma()
+    {
+        return &m_dma;
+    }
     static void start_multiple(std::span<SpiDMA*> instances)
     {
         uint32_t mask = 0;
@@ -112,14 +116,14 @@ public:
     SpiRTOS(spi_inst_t* spi, Dma dma, PicoTask* task, rtos::IDmaIrqHandler& irq)
         : SpiDMA(spi, std::move(dma)), m_task{*task}//, m_buffer(buffer)
     {
-        irq.enable_interrupt(&m_dma, task);
+        irq.setup_interrupt(&m_dma, task);
     }
-    void write(std::span<uint8_t> buff_to_send)  
+    void await_write(std::span<uint8_t> buff_to_send)  
     {   
         write_async(buff_to_send, true);
         m_task.awaitNotifs();
     }
-    void read(std::span<uint8_t> rx_buff)  
+    void await_read(std::span<uint8_t> rx_buff)  
     {
         read_async(rx_buff, true);
         m_task.awaitNotifs();
@@ -127,4 +131,52 @@ public:
      
 };
 
+
+// PicoTask* RX_task{};
+
+// class ReaderTask : public PicoTask
+// {
+//     SpiRTOS m_reader;
+// public:
+//     ReaderTask(spi_inst_t* spi, Dma rx_dma, rtos::IDmaIrqHandler& irq)
+//         : PicoTask(1, 512, "reader-task"), m_reader(spi, std::move(rx_dma), this, irq)
+//     {
+//     }
+//     void taskFunction() override
+//     {
+//         static uint8_t BUFFER[512] = {};
+//         // for(size_t n = 0; n< 512; n++)
+//         // {
+//         //     BUFFER[n] = n % 255;
+//         // }
+
+//         while(true)
+//         {
+//             m_reader.await_read(BUFFER);
+//         }
+//     }
+// };
+
  
+// class WriterTask : public PicoTask
+// {
+//     SpiRTOS m_reader;
+// public:
+//     WriterTask(spi_inst_t* spi, Dma tx_dma, rtos::IDmaIrqHandler& irq)
+//         : PicoTask(1, 512, "writer-task"), m_reader(spi, std::move(tx_dma), this, irq)
+//     {
+//     }
+//     void taskFunction() override
+//     {
+//         static uint8_t BUFFER[512] = {};
+//         for(size_t n = 0; n< 512; n++)
+//         {
+//             BUFFER[n] = n % 255;
+//         }
+
+//         while(true)
+//         {
+//             m_reader.await_write(BUFFER);
+//         }
+//     }
+// };
