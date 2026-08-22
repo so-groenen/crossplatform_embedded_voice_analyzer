@@ -68,7 +68,7 @@ public:
 
 #define bind_interrupt_EXTI(irq_name, handler_name, n_exti)        \
     void handler_name();                                               \
-    [[maybe_unused]] static Notifier<n_exti> irq_name{handler_name};                \
+    [[maybe_unused]] static Notifier<n_exti> irq_name{handler_name};   \
     void handler_name() {                                              \
         irq_name.handle_isr();                                          \
     }

@@ -75,5 +75,12 @@ if(BUILD_TESTS)
         src/drivers/exti.cpp
     )
     configure_picor_rtos_target(test_exti)
+
+
+    add_executable(test_raw_dma  
+        src/tests/raw_spi_dma_test.cpp 
+        src/drivers/exti.cpp
+    )
+    configure_picor_rtos_target(test_raw_dma)
 endif()
  
