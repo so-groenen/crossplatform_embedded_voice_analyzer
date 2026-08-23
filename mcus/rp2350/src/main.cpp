@@ -30,7 +30,7 @@
 #include "drivers/dma.hpp"
 #include "drivers/async_input.hpp"
 #include "drivers/gpio.hpp"
-#include "drivers/spi.hpp"
+#include "drivers/spi_async.hpp"
 #include "embedded_hal/traits.hpp"
 #include "embedded_hal/tests.hpp"
 #include "hardware/dma.h"

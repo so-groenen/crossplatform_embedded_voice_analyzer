@@ -53,10 +53,14 @@ endfunction()
 
 
 
+set(DRIVER_SRC 
+    src/drivers/input.cpp
+    src/drivers/async_input.cpp)
+
 if(BUILD_MAIN)
     add_executable(rp2350_main 
         src/main.cpp
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(rp2350_main)
 endif()
@@ -68,33 +72,33 @@ if(BUILD_TESTS)
 
     add_executable(test_output 
         src/tests/output_test.cpp
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_output)
 
     
     add_executable(test_exti 
         src/tests/exti_test.cpp 
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_exti)
 
 
     add_executable(test_raw_dma  
         src/tests/raw_spi_dma_test.cpp 
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_raw_dma)
 
     add_executable(test_rtos_spi  
         src/tests/rtos_spi_test.cpp 
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_rtos_spi)
 
     add_executable(test_embedded_hal
         src/tests/embedded_hal_test.cpp 
-        src/drivers/async_input.cpp
+        ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_embedded_hal)
 endif()

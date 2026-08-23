@@ -23,26 +23,22 @@
 // #include "pico/stdlib.h"
 // #include "embedded_hal/traits.hpp"
 #include "FreeRTOS/Kernel.hpp"
-#include "FreeRTOS/Task.hpp"
-#include "FreeRTOS/Mutex.hpp"
-#include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
-#include "drivers/dma.hpp"
-#include "drivers/async_input.hpp"
+
 #include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
 #include "embedded_hal/tests.hpp"
-#include "hardware/dma.h"
 #include "drivers/pico_task.hpp"
 #include "stats.hpp"
 
 #include "drivers/dma.hpp"
-#include "drivers/spi.hpp"
+#include "drivers/spi_async.hpp"
 #include "drivers/dma_irq_handler.hpp"
+#include "drivers/async_input_handler.hpp"
+#include "drivers/async_input.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
-#include "drivers/async_input_handler.hpp"
 
 
 
