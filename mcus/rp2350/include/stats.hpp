@@ -20,8 +20,7 @@
 #include "projdefs.h" 
 
 
-#define STATS_INTERVAL_MS 5000 // 10000ms = 10 seconds
- 
+  
 
 
 template<typename T>
@@ -75,10 +74,11 @@ public:
 };
 
 class StatsTask : public FreeRTOS::Task
-{
+{   
+    uint32_t m_interval_ms{5000};
 public:
-    StatsTask()
-    :     FreeRTOS::Task(tskIDLE_PRIORITY +1, 512, "stats-task")
+    StatsTask(uint32_t interval_ms = 5'000)
+    :     FreeRTOS::Task(tskIDLE_PRIORITY +1, 512, "stats-task"), m_interval_ms{interval_ms}
     {}
     void taskFunction() override
     {
@@ -86,7 +86,7 @@ public:
  
         while (true) 
         {
-            delayUntil(pdMS_TO_TICKS(STATS_INTERVAL_MS));
+            delayUntil(pdMS_TO_TICKS(m_interval_ms));
             
             UBaseType_t uxTaskCount = FreeRTOS::Kernel::getNumberOfTasks();
             auto pxTaskStatusArray  = SmartMalloc<TaskStatus_t>(uxTaskCount);

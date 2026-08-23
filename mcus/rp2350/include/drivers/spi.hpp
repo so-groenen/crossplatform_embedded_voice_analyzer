@@ -213,6 +213,7 @@ public:
     void await_read(std::span<uint8_t> rx_buff)  
     {
         read_async(rx_buff, true);
+         
         m_task.awaitNotifs();
     }
     void await_transfer(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff)
@@ -254,19 +255,19 @@ public:
         : Spi(spi, config), m_dma{std::move(dma)} 
     {
     }
-    void write_async(std::span<uint8_t> tx_buff) requires (M == spi::Mode::Tx)
+    void write_async(std::span<uint8_t> tx_buff, bool start) requires (M == spi::Mode::Tx)
     {   
         m_dma.write(tx_buff, 
             &spi_get_hw(m_spi)->dr,
             spi_get_dreq(m_spi, true),
-            true);
+            start);
     }
-    void read_async(std::span<uint8_t> rx_buff) requires (M == spi::Mode::Rx)
+    void read_async(std::span<uint8_t> rx_buff, bool start) requires (M == spi::Mode::Rx)
     {
         m_dma.read(rx_buff,
             &spi_get_hw(m_spi)->dr,
             spi_get_dreq(m_spi, /*is_tx=*/false),
-            true);
+            start);
     }
     Dma& dma()
     {
@@ -293,21 +294,21 @@ public:
         : Spi(spi, config), m_tx_dma{std::move(dma_tx)}, m_rx_dma{std::move(dma_rx)}//, m_buffer(buffer)
     {
     }
-    void write_async(std::span<uint8_t> tx_buff)// override
+    void write_async(std::span<uint8_t> tx_buff, bool start)// override
     {   
         m_tx_dma.write(tx_buff, 
             &spi_get_hw(m_spi)->dr,
             spi_get_dreq(m_spi, true),
-            true);
+            start);
     }
-    void read_async(std::span<uint8_t> rx_buff)// override
+    void read_async(std::span<uint8_t> rx_buff, bool start)// override
     {
         m_rx_dma.read(rx_buff,
             &spi_get_hw(m_spi)->dr,
             spi_get_dreq(m_spi, /*is_tx=*/false),
-            true);
+            start);
     }
-    void transfer_async(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff)
+    void transfer_async(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff, bool start)
     {
         m_tx_dma.write(tx_buff, 
             &spi_get_hw(m_spi)->dr, 
@@ -317,9 +318,12 @@ public:
             &spi_get_hw(m_spi)->dr,
             spi_get_dreq(m_spi, /*is_tx=*/false),
             false);
-
-        const uint32_t mask = (1u << m_tx_dma.channel()) | (1u << m_rx_dma.channel());
-        dma_start_channel_mask(mask);
+        
+        if(start)
+        {
+            const uint32_t mask = (1u << m_tx_dma.channel()) | (1u << m_rx_dma.channel());
+            dma_start_channel_mask(mask);
+        }
     }
     Dma& dma_tx()
     {
@@ -335,7 +339,7 @@ public:
 namespace spi::rtos 
 {
     template<spi::Mode M>
-    class SpiAsync : public SpiDmaHalf<M>
+    class SpiAsync : private SpiDmaHalf<M>
     {
         PicoTask& m_task;
     public:
@@ -346,17 +350,17 @@ namespace spi::rtos
         }
         void await_write(std::span<uint8_t> tx_buff) requires (M == spi::Mode::Tx)
         {   
-            this->write_async(tx_buff);
+            this->write_async(tx_buff, true);
             m_task.awaitNotifs();
         }
         void await_read(std::span<uint8_t> rx_buff)  requires (M == spi::Mode::Rx)
         {
-            this->read_async(rx_buff);
+            this->read_async(rx_buff, true);
             m_task.awaitNotifs();
         }
     };
 
-    class SpiAsyncFull : public SpiDmaFull
+    class SpiAsyncFull : private SpiDmaFull
     {
         PicoTask& m_task;
     public:
@@ -368,17 +372,17 @@ namespace spi::rtos
         }
         void await_write(std::span<uint8_t> tx_buff) 
         {   
-            this->write_async(tx_buff);
+            this->write_async(tx_buff, true);
             m_task.awaitNotifs();
         }
         void await_read(std::span<uint8_t> rx_buff) 
         {
-            this->read_async(rx_buff);
+            this->read_async(rx_buff, true);
             m_task.awaitNotifs();
         }
         void await_transfer(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff)
         {
-            transfer_async(rx_buff, tx_buff);
+            transfer_async(rx_buff, tx_buff, true);
             m_task.awaitNotifs();
         }
     };
