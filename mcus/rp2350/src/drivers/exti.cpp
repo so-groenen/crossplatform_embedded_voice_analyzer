@@ -43,7 +43,7 @@ ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& not
             gpio_set_pulls(pin, false, false);
     }
 
-    notifier.enable_interrupt_from_rtos(this, task);
+    notifier.bind_interrupt_from_rtos(this, task);
 
 }
 bool ExtiInput::is_awaiting() const

@@ -62,7 +62,7 @@ public:
     explicit DmaEnabledIRQ(uint channel, base::IDmaIrqHandler& irq_handler)
         : Dma(channel)
     {
-        irq_handler.enable_interrupt(this);
+        irq_handler.bind_interrupt(this);
     }
 };
 

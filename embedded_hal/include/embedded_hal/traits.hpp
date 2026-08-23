@@ -3,7 +3,10 @@
 
 #include "FreeRTOS/Task.hpp"
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <span>
 #include <sys/types.h>
  
 
@@ -42,30 +45,7 @@ namespace embedded_hal
 
 
 
-    namespace Test
-    {
-        template<IsOutput LedType>
-        class BlinkyTask : public FreeRTOS::Task
-        {
-            LedType m_led;
-            uint16_t m_ms_blink;
-        public:
-            BlinkyTask(LedType led, uint16_t ms_blink)
-                : FreeRTOS::Task(1, 2024, "blinky-test"), m_led(std::move(led)), m_ms_blink{ms_blink}
-            {
-            }
-            void taskFunction() override
-            {
-                while (true)
-                {
-                    m_led.set_high();
-                    FreeRTOS::Task::delay(pdMS_TO_TICKS(m_ms_blink));
-                    m_led.set_low();
-                    FreeRTOS::Task::delay(pdMS_TO_TICKS(m_ms_blink));       
-                }
-            }
-        };
-    }//Test
+
 }// output
 
 
@@ -93,6 +73,61 @@ namespace input
 
 }
 
+namespace blocking 
+{
+    enum class SpiError 
+    {
+        WriteFailure,
+        ReadFailure,
+        SizeMismatch
+    };
+
+    template<class T>
+    concept IsBlockingWrite = std::move_constructible<T> && requires (T g, const std::span<uint8_t> tx_buff) 
+    {
+        {g.write_blocking(tx_buff)} -> std::same_as<std::expected<void, SpiError>>;
+    };
+
+    template<class T>
+    concept IsBlockingRead = std::move_constructible<T> && requires (T g, std::span<uint8_t> rx_buff) 
+    {
+        {g.read_blocking(rx_buff)} -> std::same_as<std::expected<void, SpiError>>;
+    };
+
+    template<class T>
+    concept IsBlockingReadWrite = IsBlockingRead<T> && IsBlockingWrite<T> && requires (T g, const std::span<uint8_t> tx_buff, std::span<uint8_t> rx_buff)
+    {
+        {g.transfer_blocking(rx_buff, tx_buff)} -> std::same_as<std::expected<void, SpiError>>;
+    };
+
+
+
+
+}
+
+namespace async 
+{
+    
+    template<class T>
+    concept IsAsyncWrite = std::move_constructible<T> && requires (T g, const std::span<uint8_t> tx_buff) 
+    {
+        {g.write_await(tx_buff)};
+    };
+
+    template<class T>
+    concept IsAsyncRead = std::move_constructible<T> && requires (T g, std::span<uint8_t> rx_buff) 
+    {
+        {g.read_await(rx_buff)};
+    };
+
+    template<class T>
+    concept IsAsyncReadWrite = IsAsyncWrite<T> && IsAsyncRead<T> && requires (T g, const std::span<uint8_t> tx_buff, std::span<uint8_t> rx_buff)
+    {
+        {g.transfer_await(rx_buff, tx_buff)} -> std::same_as<void>;
+    };
+
+
+}
 
 
 }

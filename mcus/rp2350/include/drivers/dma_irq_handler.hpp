@@ -103,19 +103,20 @@ public:
             dma_hw->ints3 = (1u << m_dma_channels[n]);
         }
     }
-public:
     explicit DmaIrqHandler(irq_handler_t handler)
         : m_handler(handler)//, m_irqn(irqn)
     {
     }
-    void enable_interrupt(Dma* dma) override
+    void bind_interrupt(Dma* dma) override
     {
         m_dma_channels.push_back(dma->channel());
-        dma_channel_set_irq0_enabled(dma->channel(), true);
-        
+        if constexpr (IRQ_n == DmaIrq::IRQ_1)
+            dma->set_irqn(1); // By default we use IRQ_0!
+        dma->enable_channel(true);
+
         // Register our callback function to the CPU vector table for DMA_IRQ_0 etc...
-        irq_set_exclusive_handler(static_cast<uint32_t>(IRQ_n), m_handler);
-        irq_set_enabled(static_cast<uint32_t>(IRQ_n), true);
+        irq_set_exclusive_handler(static_cast<irq_num_t>(IRQ_n), m_handler);
+        irq_set_enabled(static_cast<irq_num_t>(IRQ_n), true);
     }
     void handle_isr() override
     {   
@@ -145,9 +146,9 @@ public:
         : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
-    void enable_interrupt_from_rtos(Dma* dma, PicoTask* task) override
+    void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) override
     {
-        this->enable_interrupt(dma);
+        this->bind_interrupt(dma);
         if(!m_tasks.push_back(task))
             panic("DMA handler: Task overflow!");
         if (m_tasks.size() != this->m_dma_channels.size())

@@ -9,6 +9,7 @@
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/regs/intctrl.h>
+#include <hardware/spi.h>
 #include <hardware/sync.h>
 #include <limits>
 #include <pico/cyw43_arch.h>
@@ -27,7 +28,10 @@
 #include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
 #include "drivers/dma.hpp"
+#include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
+#include "embedded_hal/traits.hpp"
+#include "embedded_hal/tests.hpp"
 #include "hardware/dma.h"
 #include "drivers/pico_task.hpp"
 #include "stats.hpp"
@@ -40,7 +44,7 @@
 
 
 constexpr size_t TEST_SIZE  = 1024;
-constexpr size_t N_CHANNELS = 1; // only one channel fire's interrupt!
+constexpr size_t N_CHANNELS = 2; // only one channel fire's interrupt!
 
 constexpr uint DMA_CH0      = 0;
 constexpr uint DMA_CH1      = 1;
@@ -106,8 +110,9 @@ public:
         static uint8_t txbuf[TEST_SIZE];
         static uint8_t rxbuf[TEST_SIZE];
 
-        SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
-        SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
+        // SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
+        spi::rtos::SpiAsyncFull spi_rxtx{spi_default, Dma{DMA_CH0}, Dma{DMA_CH1}, this, irqs};
+        // SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
         
     
         if(!dma_channel_is_claimed(DMA_CH0))
@@ -118,7 +123,7 @@ public:
 
 
         Rtos_sleep_ms(3000);
-        printf("-- DMA TESTS -- [baudrate:%u]\n", spi_rx.baudrate());
+        printf("-- DMA TESTS -- [baudrate:%u]\n", spi_rxtx.baudrate());
         Rtos_sleep_ms(3000);
 
         // We set the outbound DMA to transfer from a memory buffer to the SPI transmit FIFO paced by the SPI TX FIFO DREQ
@@ -126,46 +131,101 @@ public:
         // and for the write address to remain unchanged.
         while(true)
         {
-            printf("-- DMA basic transfer \n");
+            printf("Full async transfer \n");
             randomize_buff(txbuf);
+            spi_rxtx.transfer_await(rxbuf, txbuf);
+            // notifyTake();
+
+            check_buffs(rxbuf, txbuf);
+            Rtos_sleep_ms(3000);
+
+            // printf("-- DMA basic transfer \n");
+            // randomize_buff(txbuf);
 
             
-            spi_tx.write_async(txbuf, true); // Use DMA to transfer data under the hood
-            spi_rx.await_read(rxbuf);        // this one blocks and await interrupts
-                                             // interrupt is hoocked up to channel 0, so the other one will not trigger any problems.
+            // spi_tx.write_async(txbuf, true); // Use DMA to transfer data under the hood
+            // spi_rx.read_await(rxbuf);        // this one blocks and await interrupts
+            //                                  // interrupt is hoocked up to channel 0, so the other one will not trigger any problems.
  
-            if (spi_tx.dma().is_busy())
-            {
-                panic("RX completed before TX");
-            }
-            check_buffs(rxbuf, txbuf);
-            Rtos_sleep_ms(3000);
+            // if (spi_tx.dma().is_busy())
+            // {
+            //     panic("RX completed before TX");
+            // }
+            // check_buffs(rxbuf, txbuf);
+            // Rtos_sleep_ms(3000);
 
 
-            printf("-- DMA inplace transfer -- \n");
-            randomize_buff(txbuf);
+            // printf("-- DMA inplace transfer -- \n");
+            // randomize_buff(txbuf);
 
-            auto res = spi_tx.transfer_blocking(rxbuf, txbuf);
-            if(!res)
-                panic("transfer error!");
-            check_buffs(rxbuf, txbuf);
-            Rtos_sleep_ms(3000);
+            // auto res = spi_tx.transfer_blocking(rxbuf, txbuf);
+            // if(!res)
+            //     panic("transfer error!");
+            // check_buffs(rxbuf, txbuf);
+            // Rtos_sleep_ms(3000);
         }
     }
 };
+
+using embedded_hal::tests::async::AsyncTransferApp;
+using spi::rtos::SpiAsyncFull;
+
+class TransferTask : public PicoTask
+{
+    AsyncTransferApp<SpiAsyncFull> app;
+public:
+    TransferTask(spi_inst_t* inst)
+        : app{SpiAsyncFull{inst, Dma{DMA_CH0}, Dma{DMA_CH1}, this, irqs}}
+    {
+    }
+    void taskFunction() override
+    {
+        app.run();
+    }
+};
+
+
+
+using embedded_hal::tests::output::BlinkyApp;
  
- 
+class BlinkyTask : public PicoTask
+{
+    uint32_t blink_ms{500};
+public:
+    BlinkyTask()
+        : PicoTask{2, 256, "blinky-task"}
+    {
+    }
+    void taskFunction() override
+    {
+        BlinkyApp app{pico2_w::WifiOutput{}, blink_ms};
+        app.run();
+    }
+};
 
 int main() 
 {
     stdio_init_all();
 
 
-    HelloDmaRtosTask writer{};
+    auto config = spi::Config::create_default();
+    config.baudrate = 1000 * 1000;
+    spi::Spi::init_from_config(spi_default, config);
 
-    constexpr uint32_t stats_ms{20'000};
+    gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
+    gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
+    gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
+    gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
+
+    // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
+    hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
+
+    // HelloDmaRtosTask dma_task{};
+
+    constexpr uint32_t stats_ms{10'000};
     StatsTask stats{stats_ms};
-
+    TransferTask transfer_task{spi_default};
+    BlinkyTask blinky_task{};
     // constexpr uint32_t counter_ms{500};
     // CounterTask counter_task{counter_ms, "counter-tsk"};
     FreeRTOS::Kernel::startScheduler();

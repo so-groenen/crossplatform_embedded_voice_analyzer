@@ -46,8 +46,8 @@ namespace base
     {
     public:
         virtual ~IDmaIrqHandler() = default;
-        // virtual void enable_interrupt() = 0;
-        virtual void enable_interrupt(Dma* dma) = 0;
+        // virtual void bind_interrupt() = 0;
+        virtual void bind_interrupt(Dma* dma) = 0;
         virtual void handle_isr() = 0;
     };
 }
@@ -58,8 +58,8 @@ namespace rtos
     {
     public:
         virtual ~IDmaIrqHandler() = default;
-        // virtual void enable_interrupt() = 0;
-        virtual void enable_interrupt_from_rtos(Dma* dma, PicoTask* task) = 0;
+        // virtual void bind_interrupt() = 0;
+        virtual void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) = 0;
     };
 }
 

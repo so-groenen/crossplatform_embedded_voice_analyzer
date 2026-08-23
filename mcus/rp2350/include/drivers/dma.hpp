@@ -23,6 +23,7 @@ class Dma
 protected:
     uint m_dma{}; 
     dma_channel_config m_config{};
+    uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
     static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
 public:
     explicit Dma(uint channel)
@@ -88,6 +89,17 @@ public:
     void await_blocking()
     {
         dma_channel_wait_for_finish_blocking(m_dma);
+    }
+
+    // interrupt handling:
+    void enable_channel(bool value)
+    {
+        dma_irqn_set_channel_enabled(m_irqn_index, m_dma, value);
+    }
+    // default is zero, and IRQ1 is rarely used.
+    void set_irqn(uint irqn_index)
+    {
+        m_irqn_index = irqn_index;
     }
     bool is_busy() const 
     {

@@ -128,7 +128,7 @@ public:
 
             
             spi_tx.write_async(txbuf, true); // Use DMA to transfer data under the hood
-            spi_rx.await_read(rxbuf);        // this one blocks and await interrupts
+            spi_rx.read_await(rxbuf);        // this one blocks and await interrupts
                                              // interrupt is hoocked up to channel 0, so the other one will not trigger any problems.
  
             if (spi_tx.dma().is_busy())
