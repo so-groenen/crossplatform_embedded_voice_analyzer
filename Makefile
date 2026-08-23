@@ -1,10 +1,10 @@
 # Main:
-# TARGET         := rp2350_main
+TARGET         := rp2350_main
 
 # Examples:
 # TARGET         := test_exti
 # TARGET         := test_output
-TARGET 	     := test_raw_dma
+# TARGET 	     := test_raw_dma
 
 BUILD_DIR      := build
 PRESET		   := pico2-debug

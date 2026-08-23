@@ -14,6 +14,7 @@
 #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
+#include <pico/stdio.h>
 #include <pico/time.h>
 #include <pico/types.h>
 #include <span>
@@ -26,96 +27,47 @@
 #include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
 #include "drivers/dma.hpp"
-#include "drivers/gpio.hpp"
-
-#include "pico/binary_info.h"
-#include "hardware/spi.h"
+#include "drivers/spi.hpp"
 #include "hardware/dma.h"
-
 #include "drivers/pico_task.hpp"
-#include "drivers/exti.hpp"
-#include "projdefs.h"
-#include "drivers/exti_notifier.hpp"
 #include "stats.hpp"
-#include "thread_safe_ctx.hpp"
-
-// ThreadSafeCtx g_thread_safe_ctx{};
- 
- 
-struct SpiConfig 
-{
-    uint32_t frequency;
-    uint32_t phase;
-    uint32_t polarity;
-
-};
 
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
 #include "drivers/dma_irq_handler.hpp"
 
-#define TEST_SIZE 1024
-  
-
-PicoTask* rx_task{};
-
-class ReaderTask : public PicoTask
-{
-    SpiRTOS m_reader;
-public:
-    ReaderTask(spi_inst_t* spi, Dma rx_dma, rtos::IDmaIrqHandler& irq)
-        : PicoTask(1, 512, "reader-task"), m_reader(spi, std::move(rx_dma), this, irq)
-    {
-        rx_task = this;
-    }
-    void taskFunction() override
-    {
-        static uint8_t BUFFER[512] = {};
-        // for(size_t n = 0; n< 512; n++)
-        // {
-        //     BUFFER[n] = n % 255;
-        // }
-        static pico2_w::WifiOutput led{};
-        while(true)
-        {
-            // printf("Awaiting notifs ... \n");
-            notifyTake();
-            m_reader.await_read(BUFFER);
-            led.toggle();
-            // printf("Awaiting read ... \n");
-        }
-    }
-};
-
-
-// // bind_interrupt_DMA_0(base, dma_irqs, my_handler, N_CHANNELS);
-// bind_interrupt_DMA_0(rtos, rtos_irq, my_handler, N_CHANNELS);
-
-
-class DmaEnabledIRQ : public Dma
-{
-public:
-    explicit DmaEnabledIRQ(uint channel, base::IDmaIrqHandler& irq_handler)
-        : Dma(channel)
-    {
-        irq_handler.enable_interrupt(this);
-    }
-};
-
-constexpr size_t N_CHANNELS = 1;
-bind_interrupt_DMA_0(base, irqs, my_handler, N_CHANNELS);
-
-
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
+
+
+constexpr size_t TEST_SIZE  = 1024;
+constexpr size_t N_CHANNELS = 1; // only one channel fire's interrupt!
+
+constexpr uint DMA_CH0      = 0;
+constexpr uint DMA_CH1      = 1;
+
+
+// bind the interrupt handler "irqs" to the my_handler interrupt callback
+// use it to register N_channel = 1 interrupt from DMA channel
+// and also register the corresponding task to block / unblock it!
+
+bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
+
+
+
+using spi::rtos::SpiAsync;
+using spi::base::SpiDma;
+using spi::Mode;
 
 class HelloDmaRtosTask : public PicoTask
 {
-    // SpiRTOS m_reader;
 public:
     HelloDmaRtosTask()
         : PicoTask(1, 512, "DMA-test-task")
     {
-        spi_init(spi_default, 1000 * 1000);
+        auto config = spi::Config::create_default();
+        config.baudrate = 1000 * 1000;
+        spi::Spi::init_from_config(spi_default, config);
+
         gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
         gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
         gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
@@ -124,11 +76,14 @@ public:
         // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
         hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
     }
+
     static void check_buffs(std::span<uint8_t> rbuff, std::span<uint8_t> tbuff)
     {
         printf("Done. Checking...");
-        for (uint i = 0; i < rbuff.size(); ++i) {
-            if (rbuff[i] != rbuff[i]) {
+        for (uint i = 0; i < rbuff.size(); ++i) 
+        {
+            if (rbuff[i] != rbuff[i]) 
+            {
                 panic("Mismatch at %d/%d: expected %02x, got %02x",
                     i, TEST_SIZE, tbuff[i], rbuff[i]
                 );
@@ -136,6 +91,7 @@ public:
         } 
         printf("All good!\n");
     }
+
     static void randomize_buff(std::span<uint8_t> rbuff)
     {
         for (uint i = 0; i < TEST_SIZE; ++i) 
@@ -150,23 +106,8 @@ public:
         static uint8_t txbuf[TEST_SIZE];
         static uint8_t rxbuf[TEST_SIZE];
 
-        constexpr uint DMA_CH0{0};
-        constexpr uint DMA_CH1{1};
-
-        using spi::rtos::SpiAsync;
-     
-        
-        using spi::Mode;
-
-        // SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};
-
-        // SpiRTOS spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};  // calls the the ISR which can unblock the thread
-        // SpiRTOS spi_rx{spi_default, Dma{DMA_CH0}, this, rtos_irq};
-        SpiDmaHalf<Mode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
-        SpiDmaHalf<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
-        
-
-        // SpiDMA  spi_tx{spi_default, Dma{DMA_CH1}};                  // transfer silently
+        SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
+        SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
         
     
         if(!dma_channel_is_claimed(DMA_CH0))
@@ -187,19 +128,12 @@ public:
         {
             printf("-- DMA basic transfer \n");
             randomize_buff(txbuf);
-            // spi_tx.write_async(txbuf, true);    // Launch DMA channel 0 to transfer data to spi
-            // spi_rx.await_read(rxbuf);           // start reading and block the thread ...
-                                                // when all data has been recieved, the ISR will unblock the thread!
-            spi_tx.write_async(txbuf, false);
-            spi_rx.read_async(rxbuf, false);
-            Dma* instances[] = {&spi_rx.dma(), &spi_tx.dma()};
-            Dma::start_multiple(instances);
 
-
-            // notifyTake();       // call to read async triggers interrupt which will increase the count, and the next "await" call will finish before hand
-
-            spi_rx.dma().await_blocking();
-
+            
+            spi_tx.write_async(txbuf, true); // Use DMA to transfer data under the hood
+            spi_rx.await_read(rxbuf);        // this one blocks and await interrupts
+                                             // interrupt is hoocked up to channel 0, so the other one will not trigger any problems.
+ 
             if (spi_tx.dma().is_busy())
             {
                 panic("RX completed before TX");
@@ -216,21 +150,6 @@ public:
                 panic("transfer error!");
             check_buffs(rxbuf, txbuf);
             Rtos_sleep_ms(3000);
-
-
-
-            // printf("-- DMA use RTOS  -- \n");
-            // randomize_buff(txbuf);
-
-            // spi_tx.write_async(txbuf, true);
-            // spi_rx.await_read(rxbuf);         // Kernel yields control to other task & awaits
-
-            // if (spi_tx.dma().is_busy())
-            // {
-            //     panic("RX completed before TX");
-            // }
-            // check_buffs(rxbuf, txbuf);
-            // Rtos_sleep_ms(3000);
         }
     }
 };

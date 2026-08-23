@@ -112,11 +112,11 @@ public:
         constexpr uint DMA_CH0{0};
         constexpr uint DMA_CH1{1};
 
-        using spi::rtos::SpiAsync;
+        using spi::base::SpiDma;
         using spi::Mode;
 
-        SpiDmaHalf<Mode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
-        SpiDmaHalf<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
+        SpiDma<Mode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
+        SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
          
         if(!dma_channel_is_claimed(DMA_CH0))
             panic("channel 0 not claimed");
