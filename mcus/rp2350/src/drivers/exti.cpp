@@ -20,8 +20,6 @@ void ExtiInput::set_mode(uint32_t new_mode)
     m_mode = new_mode;
     gpio_set_irq_enabled(m_pin, m_mode, true);
     irq_set_enabled(IO_IRQ_BANK0, true);
-
-
 }
 
 
@@ -125,4 +123,25 @@ bool ExtiInput::is_low() const
 Level ExtiInput::get_level() const
 {
     return (static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin)));
+}
+
+ExtiInput::ExtiInput(ExtiInput&& other)
+    : m_pin{other.m_pin}, m_task{other.m_task}, m_mode{other.m_mode}, m_awaiting(other.m_awaiting)
+{
+
+}
+ExtiInput& ExtiInput::operator=(ExtiInput&& other)
+{
+    if(&other != this)
+    {
+        m_pin = other.m_pin;
+        m_task = other.m_task;
+        m_mode = other.m_mode;
+        m_awaiting = other.m_awaiting;
+    }
+    return *this;
+}
+ExtiInput::~ExtiInput()
+{
+
 }

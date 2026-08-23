@@ -66,10 +66,10 @@ namespace async
     template<class T>
     requires (IsAsyncReadWrite<T>)
     class AsyncTransferApp
-    {   T m_spi;
+    {   T& m_spi;
     public:
-        AsyncTransferApp(T spi)
-            : m_spi(std::move(spi))
+        AsyncTransferApp(T& spi)
+            : m_spi(spi)
         {
         }
         static void check_buffs(std::span<uint8_t> rbuff, std::span<uint8_t> tbuff)
@@ -115,11 +115,11 @@ namespace output
     template<IsOutput LedType>
     class BlinkyApp
     {
-        LedType m_led;
+        LedType& m_led;
         uint32_t m_ms_blink;
     public:
-        BlinkyApp(LedType led, uint32_t ms_blink)
-            : m_led(std::move(led)), m_ms_blink{ms_blink}
+        BlinkyApp(LedType& led, uint32_t ms_blink)
+            : m_led(led), m_ms_blink{ms_blink}
         {
         }
         void run()
@@ -133,7 +133,36 @@ namespace output
             }
         }
     };
-}//Test
+}//outout
+
+
+
+namespace input
+{
+    using namespace embedded_hal::input;
+
+    template<IsInput Button>
+    class ButtonApp
+    {
+        Button& m_button;
+    public:
+        ButtonApp(Button& button)
+            : m_button(button)
+        {
+        }
+        void run()
+        {
+            while (true)
+            {
+                m_button.wait_for_any_edge();
+                puts("Click!");
+                FreeRTOS::Task::delay(pdMS_TO_TICKS(10));       
+            }
+        }
+    };
+}//input
+
+ 
 
 
 

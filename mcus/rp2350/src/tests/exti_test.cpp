@@ -21,13 +21,14 @@
 #include "drivers/gpio.hpp"
 #include "drivers/pico_task.hpp"
 #include "drivers/exti.hpp"
+#include "embedded_hal/tests.hpp"
 #include "projdefs.h"
 #include "drivers/exti_notifier.hpp"
 #include "stats.hpp"
 #include "thread_safe_ctx.hpp"
  
-constexpr uint16_t PIN_16{16};
-constexpr size_t num_buttons{2};
+constexpr uint16_t PIN_20{20};
+constexpr size_t num_buttons{1};
 constexpr size_t stack_button{512};
  
 bind_interrupt_EXTI(exti_irq, exti_handler, num_buttons);
@@ -66,17 +67,17 @@ class ButtonWaitForEdgeTask : public PicoTask
     ExtiInput m_btn;
 public:
     ButtonWaitForEdgeTask()
-      : PicoTask(1, 256, "edge-task"), m_btn(PIN_16, Pull::Up, this, exti_irq)
+      : PicoTask(1, 256, "edge-task"), m_btn(PIN_20, Pull::Up, this, exti_irq)
     {
     }
 
     void taskFunction() override
     {
-        pico2_w::WifiOutput m_led{}; // MUST BE CALLED INSIDE TASK, because it uses FreeRTOS tasks under the hood, and need schedueler to run
+        // pico2_w::WifiOutput m_led{}; // MUST BE CALLED INSIDE TASK, because it uses FreeRTOS tasks under the hood, and need schedueler to run
         while(true)
         {
             m_btn.wait_for_any_edge();
-            m_led.toggle();
+            // m_led.toggle();
 
             g_thread_safe_ctx([]
             {
@@ -86,8 +87,27 @@ public:
         }
     }
 };
+  
 
 
+using embedded_hal::tests::output::BlinkyApp;
+  
+
+class BlinkyTask : public PicoTask
+{
+    uint32_t blink_ms{500};
+public:
+    BlinkyTask()
+        : PicoTask{2, 256, "blinky-task"}
+    {
+    }
+    void taskFunction() override
+    {
+        pico2_w::WifiOutput led{};
+        BlinkyApp app{led, blink_ms};
+        app.run();
+    }
+};
 
 
 int main() 
@@ -95,6 +115,9 @@ int main()
     stdio_init_all();
     // sleep_ms(1000);
      
+
+    BlinkyTask blinky{};
+
     ButtonWaitForEdgeTask btn_task{};
     CounterTask counter_task1{400, "cnt-task2"};
     CounterTask counter_task2{1200, "cnt-task1"};

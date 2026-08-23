@@ -38,6 +38,14 @@ public:
     bool is_high() const;
     bool is_low() const;
     Level get_level() const;
+    
+    ExtiInput(const ExtiInput& other) = delete;
+    ExtiInput& operator=(ExtiInput& other) = delete;
+    
+    ExtiInput(ExtiInput&& other);
+    ExtiInput& operator=(ExtiInput&& other);
+    ~ExtiInput();
+
 };
 
 static_assert(embedded_hal::input::IsInput<ExtiInput>, "must implement Input traits");

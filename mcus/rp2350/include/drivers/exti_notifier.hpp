@@ -44,7 +44,7 @@ public:
         if(n_btns < N && btn && task)
         {
             m_buttons[n_btns] = btn;
-            m_tasks[n_btns] = task;
+            m_tasks[n_btns]   = task;
             n_btns++;
 
             // irq_set_enabled(IO_IRQ_BANK0, false);

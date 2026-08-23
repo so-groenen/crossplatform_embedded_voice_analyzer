@@ -359,6 +359,7 @@ namespace rtos
             
             dma_start_channel_mask(mask);
             m_task.awaitNotifs();
+            // m_task.awaitNotifs();
         }
     };
 
