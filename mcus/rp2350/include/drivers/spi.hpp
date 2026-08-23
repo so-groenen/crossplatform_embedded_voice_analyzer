@@ -17,7 +17,7 @@
 #include <span>
 #include <stddef.h>
 
-#include "drivers/interface_dma_irq_handler.hpp"
+#include "drivers/interface_async_dma_handler.hpp"
 #include "embedded_hal/traits.hpp"
 #include "hardware/spi.h"
 #include "hardware/dma.h"

@@ -40,7 +40,7 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
-#include "drivers/dma_irq_handler.hpp"
+#include "drivers/async_dma_handler.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
 #define TEST_SIZE 1024
@@ -59,7 +59,7 @@ bind_interrupt_DMA_0(base, irqs, my_handler, N_CHANNELS);
 class DmaEnabledIRQ : public Dma
 {
 public:
-    explicit DmaEnabledIRQ(uint channel, base::IDmaIrqHandler& irq_handler)
+    explicit DmaEnabledIRQ(uint channel, base::IAsyncDmaHandler& irq_handler)
         : Dma(channel)
     {
         irq_handler.bind_interrupt(this);

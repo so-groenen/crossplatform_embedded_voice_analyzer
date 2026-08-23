@@ -17,7 +17,7 @@
 #include <span>
 #include <stddef.h>
 
-#include "drivers/interface_dma_irq_handler.hpp"
+#include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
 #include "hardware/spi.h"
@@ -185,7 +185,7 @@ namespace rtos
         PicoTask& m_task;
         DmaForSpi<M> m_dma{};
     public:
-        SpiAsync(spi_inst_t* spi, Dma dma, PicoTask* task, ::rtos::IDmaIrqHandler& irq)
+        SpiAsync(spi_inst_t* spi, Dma dma, PicoTask* task, ::rtos::IAsyncDmaHandler& irq)
             : Spi(spi), m_dma{std::move(dma)}, m_task{*task}//, m_buffer(buffer)
         {
             irq.bind_interrupt_from_rtos(&m_dma, task);
@@ -209,7 +209,7 @@ namespace rtos
         DmaForSpi<spi::Mode::Tx> m_dma_tx;
         DmaForSpi<spi::Mode::Rx> m_dma_rx;
     public:
-        SpiAsyncFull(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, PicoTask* task, ::rtos::IDmaIrqHandler& irq)
+        SpiAsyncFull(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, PicoTask* task, ::rtos::IAsyncDmaHandler& irq)
             : Spi{spi}, m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}, m_task{*task}
         {
             irq.bind_interrupt_from_rtos(&m_dma_tx, task);

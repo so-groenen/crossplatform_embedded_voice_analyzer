@@ -39,7 +39,7 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
-#include "drivers/dma_irq_handler.hpp"
+#include "drivers/async_dma_handler.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
 

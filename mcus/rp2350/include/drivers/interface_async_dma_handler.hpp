@@ -42,10 +42,10 @@
  
 namespace base
 {
-    class IDmaIrqHandler
+    class IAsyncDmaHandler
     {
     public:
-        virtual ~IDmaIrqHandler() = default;
+        virtual ~IAsyncDmaHandler() = default;
         // virtual void bind_interrupt() = 0;
         virtual void bind_interrupt(Dma* dma) = 0;
         virtual void handle_isr() = 0;
@@ -54,10 +54,10 @@ namespace base
 
 namespace rtos 
 {
-    class IDmaIrqHandler //: public base::IDmaIrqHandler
+    class IAsyncDmaHandler //: public base::IAsyncDmaHandler
     {
     public:
-        virtual ~IDmaIrqHandler() = default;
+        virtual ~IAsyncDmaHandler() = default;
         // virtual void bind_interrupt() = 0;
         virtual void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) = 0;
     };

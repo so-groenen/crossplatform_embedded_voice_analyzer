@@ -34,7 +34,7 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi_async.hpp"
-#include "drivers/dma_irq_handler.hpp"
+#include "drivers/async_dma_handler.hpp"
 #include "drivers/async_input_handler.hpp"
 #include "drivers/async_input.hpp"
 

@@ -26,7 +26,7 @@
  
 
 #include "embedded_hal/heapless.hpp"
-#include "drivers/interface_dma_irq_handler.hpp"
+#include "drivers/interface_async_dma_handler.hpp"
 #include "hardware/dma.h"
 
 #include "drivers/pico_task.hpp"
@@ -57,7 +57,7 @@ namespace base
 {
 
 template<DmaIrq IRQ_n, size_t N_Channels>
-class DmaIrqHandler: public base::IDmaIrqHandler
+class AsyncDmaHandler: public base::IAsyncDmaHandler
 {
 public:
     irq_handler_t m_handler{};
@@ -103,7 +103,7 @@ public:
             dma_hw->ints3 = (1u << m_dma_channels[n]);
         }
     }
-    explicit DmaIrqHandler(irq_handler_t handler)
+    explicit AsyncDmaHandler(irq_handler_t handler)
         : m_handler(handler)//, m_irqn(irqn)
     {
     }
@@ -138,12 +138,12 @@ public:
 namespace rtos 
 {
 template<DmaIrq IRQ_n, size_t N>
-class DmaIrqHandler : public base::DmaIrqHandler<IRQ_n, N> , public rtos::IDmaIrqHandler
+class AsyncDmaHandler : public base::AsyncDmaHandler<IRQ_n, N> , public rtos::IAsyncDmaHandler
 {
     Vector<PicoTask*, N> m_tasks{};
 public:
-    explicit DmaIrqHandler(irq_handler_t handler)
-        : base::DmaIrqHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
+    explicit AsyncDmaHandler(irq_handler_t handler)
+        : base::AsyncDmaHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
     void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) override
@@ -178,14 +178,14 @@ public:
 
 #define bind_interrupt_DMA_0(X, irqs, handler_name, n_channels)                             \
     void handler_name();                                                                    \
-    [[maybe_unused]] static X::DmaIrqHandler<DmaIrq::IRQ_0, n_channels> irqs{handler_name}; \
+    [[maybe_unused]] static X::AsyncDmaHandler<DmaIrq::IRQ_0, n_channels> irqs{handler_name}; \
     void handler_name() {                                                                   \
         irqs.handle_isr();                                                                  \
     }                                                                                       
 
 #define bind_interrupt_DMA_1(X, irqs, handler_name, n_channels)                             \
     void handler_name();                                                                    \
-    [[maybe_unused]] static X::DmaIrqHandler<DmaIrq::IRQ_1, n_channels> irqs{handler_name}; \
+    [[maybe_unused]] static X::AsyncDmaHandler<DmaIrq::IRQ_1, n_channels> irqs{handler_name}; \
     void handler_name() {                                                                   \
         irqs.handle_isr();                                                                  \
     }                                                                                       
