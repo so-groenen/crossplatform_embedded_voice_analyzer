@@ -28,7 +28,7 @@
 #include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
 #include "drivers/dma.hpp"
-#include "drivers/exti.hpp"
+#include "drivers/async_input.hpp"
 #include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
@@ -42,7 +42,7 @@
 #include "drivers/dma_irq_handler.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
-#include "drivers/exti_notifier.hpp"
+#include "drivers/async_input_handler.hpp"
 
 
 
@@ -134,7 +134,7 @@ public:
     }
     void taskFunction() override
     {
-        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
         ButtonAnyEdge app{button};
         app.run();
     }
@@ -151,7 +151,7 @@ public:
     }
     void taskFunction() override
     {
-        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
         pico2_w::WifiOutput led{};
         ButtonRaiseBlinkApp app{button, led};
         app.run();
@@ -169,7 +169,7 @@ public:
     }
     void taskFunction() override
     {
-        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
         pico2_w::WifiOutput led{};
         ButtonFallBlinkApp app{button, led};
         app.run();

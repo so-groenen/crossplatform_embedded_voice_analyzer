@@ -1,8 +1,8 @@
 #pragma once
 
 #include "FreeRTOS/Task.hpp"
-// #include "drivers/interface_exti_notifier.hpp"
-#include "drivers/exti.hpp"
+// #include "drivers/interface_async_input_handler.hpp"
+#include "drivers/async_input.hpp"
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <array>
@@ -10,53 +10,33 @@
 
 
 template<size_t N>
-class Notifier : public IExtiNotifier
+class AsyncInputHandler : public IAsyncInputHandler
 {
     std::array<uint16_t, N> m_pins{};
     std::array<PicoTask*, N> m_tasks{};
     irq_handler_t m_handler{};
     size_t n_btns{};
-    // void handle_individual_isr(const ExtiInput* btn, PicoTask* task)
-    // {
-    //     if (gpio_get_irq_event_mask(btn->pin()) & ExtiInput::all_irq) 
-    //     {
-    //         gpio_acknowledge_irq(btn->pin(), ExtiInput::all_irq);
-    //         // gpio_set_irq_enabled(btn->pin(), ExtiInput::all_irq, false);
-    //         if(task /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
-    //         {
-    //             bool higherPriorityTaskWoken = false;
-    //             task->notifyGiveFromISR(higherPriorityTaskWoken);
-    //             if(higherPriorityTaskWoken)
-    //                 FreeRTOS::Kernel::yield();
-    //         }
-    //     }
-    // }
-
 public:
-    explicit Notifier(irq_handler_t handler)
+    explicit AsyncInputHandler(irq_handler_t handler)
         : m_handler(handler)
     {
         assert(handler && "handler must be valid");
     }
     
-    Notifier& operator()(PicoTask* task)
+    AsyncInputHandler& operator()(PicoTask* task)
     {
         return *this;
     }
-    void bind_interrupt_from_rtos(ExtiInput* btn, PicoTask* task) override
+    void bind_interrupt_from_rtos(AsyncInput* btn, PicoTask* task) override
     {
         if(n_btns < N && btn && task)
         {
             m_pins[n_btns]  = btn->pin();
             m_tasks[n_btns] = task;
             n_btns++;
-
-            // irq_set_enabled(IO_IRQ_BANK0, false);
-            // gpio_set_irq_enabled(btn->pin(), btn->mode(), false);
             
             gpio_add_raw_irq_handler(btn->pin(), m_handler);
-            
-            gpio_set_irq_enabled(btn->pin(), btn->mode(), true);
+            // gpio_set_irq_enabled(btn->pin(), btn->mode(), true);
             irq_set_enabled(IO_IRQ_BANK0, true);
         }       
     }
@@ -64,10 +44,10 @@ public:
     {
         for (size_t n = 0; n < n_btns; ++n)
         {
-            if (gpio_get_irq_event_mask(m_pins[n]) & ExtiInput::all_irq) 
+            if (gpio_get_irq_event_mask(m_pins[n]) & AsyncInput::all_irq) 
             {
-                gpio_acknowledge_irq(m_pins[n], ExtiInput::all_irq);
-                // gpio_set_irq_enabled(btn->pin(), ExtiInput::all_irq, false);
+                gpio_acknowledge_irq(m_pins[n], AsyncInput::all_irq);
+                // gpio_set_irq_enabled(btn->pin(), AsyncInput::all_irq, false);
                 if(m_tasks[n] /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
                 {
                     bool higherPriorityTaskWoken = false;
@@ -83,7 +63,7 @@ public:
 
 #define bind_interrupt_EXTI(irq_name, handler_name, n_exti)        \
     void handler_name();                                               \
-    [[maybe_unused]] static Notifier<n_exti> irq_name{handler_name};   \
+    [[maybe_unused]] static AsyncInputHandler<n_exti> irq_name{handler_name};   \
     void handler_name() {                                              \
         irq_name.handle_isr();                                          \
     }
@@ -92,16 +72,16 @@ public:
 // #include "FreeRTOS/Kernel.hpp"
 // #include "FreeRTOS/Task.hpp"
 // #include "drivers/pico_task.hpp"
-// #include "drivers/exti.hpp"
+// #include "drivers/async_input.hpp"
 // #include "array"
 // #include <cstddef>
 
-// class ExtiNotifier
+// class ExtiAsyncInputHandler
 // {
 //     PicoTask* m_task{};
-//     ExtiInput* m_input{};
+//     AsyncInput* m_input{};
 // public:
-//     void set_input(ExtiInput* input)
+//     void set_input(AsyncInput* input)
 //     {
 //         if(!input)
 //             return;

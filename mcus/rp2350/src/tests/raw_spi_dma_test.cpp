@@ -33,9 +33,9 @@
 #include "hardware/dma.h"
 
 #include "drivers/pico_task.hpp"
-#include "drivers/exti.hpp"
+#include "drivers/async_input.hpp"
 #include "projdefs.h"
-#include "drivers/exti_notifier.hpp"
+#include "drivers/async_input_handler.hpp"
 #include "stats.hpp" 
 
 #include "drivers/dma.hpp"

@@ -20,10 +20,10 @@
 #include "FreeRTOSConfig.h"
 #include "drivers/gpio.hpp"
 #include "drivers/pico_task.hpp"
-#include "drivers/exti.hpp"
+#include "drivers/async_input.hpp"
 #include "embedded_hal/tests.hpp"
 #include "projdefs.h"
-#include "drivers/exti_notifier.hpp"
+#include "drivers/async_input_handler.hpp"
 #include "stats.hpp"
 #include "thread_safe_ctx.hpp"
  
@@ -64,7 +64,7 @@ public:
 
 class ButtonWaitForEdgeTask : public PicoTask
 {
-    ExtiInput m_btn;
+    AsyncInput m_btn;
 public:
     ButtonWaitForEdgeTask()
       : PicoTask(1, 256, "edge-task"), m_btn(PIN_20, Pull::Up, this, exti_irq)

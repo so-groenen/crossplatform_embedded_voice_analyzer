@@ -1,7 +1,7 @@
-#include "drivers/exti.hpp"
+#include "drivers/async_input.hpp"
 #include "FreeRTOS/Kernel.hpp"
 #include "FreeRTOS/Task.hpp"
-#include "drivers/exti_notifier.hpp"
+#include "drivers/async_input_handler.hpp"
 #include "embedded_hal/traits.hpp"
 #include <array>
 #include <cassert>
@@ -14,7 +14,7 @@
 static constexpr uint32_t all_irq = GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE|GPIO_IRQ_LEVEL_HIGH|GPIO_IRQ_LEVEL_LOW;
  
 
-void ExtiInput::set_mode(uint32_t new_mode)
+void AsyncInput::set_mode(uint32_t new_mode)
 {
     // irq_set_enabled(IO_IRQ_BANK0, false);
     // gpio_acknowledge_irq(m_pin, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
@@ -24,7 +24,7 @@ void ExtiInput::set_mode(uint32_t new_mode)
 }
 
 
-ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& notifier, uint32_t mode)
+AsyncInput::AsyncInput(uint16_t pin, Pull pull, PicoTask* task, IAsyncInputHandler& notifier, uint32_t mode)
     : m_pin{pin}, m_task{task}, m_mode{mode}
 {
     gpio_init(pin);
@@ -47,19 +47,19 @@ ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& not
 
 
 }
-bool ExtiInput::is_awaiting() const
-{
-    return m_awaiting;
-}
-uint16_t ExtiInput::pin() const 
+// bool AsyncInput::is_awaiting() const
+// {
+//     return m_awaiting;
+// }
+uint16_t AsyncInput::pin() const 
 {
     return m_pin;
 }
-uint32_t ExtiInput::mode() const 
-{
-    return m_mode;
-}
-void ExtiInput::wait_for_rising_edge()
+// uint32_t AsyncInput::mode() const 
+// {
+//     return m_mode;
+// }
+void AsyncInput::wait_for_rising_edge()
 {
     // if(m_mode != GPIO_IRQ_EDGE_RISE)
         set_mode(GPIO_IRQ_EDGE_RISE);
@@ -76,7 +76,7 @@ void ExtiInput::wait_for_rising_edge()
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
 
 }
-void ExtiInput::wait_for_falling_edge()
+void AsyncInput::wait_for_falling_edge()
 {
     // if(m_mode != GPIO_IRQ_EDGE_FALL)
     // set_mode(GPIO_IRQ_EDGE_FALL);
@@ -89,7 +89,7 @@ void ExtiInput::wait_for_falling_edge()
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
     // m_awaiting = false;
 }
-void ExtiInput::wait_for_any_edge()
+void AsyncInput::wait_for_any_edge()
 {
     // if(m_mode != (GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE))
     // set_mode(GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE);
@@ -106,7 +106,7 @@ void ExtiInput::wait_for_any_edge()
     // m_awaiting = false;
 }
 
-void ExtiInput::wait_for_high()
+void AsyncInput::wait_for_high()
 {
     // if(m_mode != (GPIO_IRQ_LEVEL_HIGH))
     //     set_mode(GPIO_IRQ_LEVEL_HIGH);
@@ -120,7 +120,7 @@ void ExtiInput::wait_for_high()
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
 }
 
-void ExtiInput::wait_for_low()
+void AsyncInput::wait_for_low()
 {
     // if(m_mode != (GPIO_IRQ_LEVEL_LOW))
     //     set_mode(GPIO_IRQ_LEVEL_LOW);
@@ -139,26 +139,26 @@ void ExtiInput::wait_for_low()
 }
 
 
-bool ExtiInput::is_high() const
+bool AsyncInput::is_high() const
 {
     return gpio_get(m_pin); 
 }
-bool ExtiInput::is_low() const
+bool AsyncInput::is_low() const
 {
     return !gpio_get(m_pin);
 }
 
-Level ExtiInput::get_level() const
+Level AsyncInput::get_level() const
 {
     return (static_cast<embedded_hal::gpio::Level>(gpio_get(m_pin)));
 }
 
-ExtiInput::ExtiInput(ExtiInput&& other)
+AsyncInput::AsyncInput(AsyncInput&& other)
     : m_pin{other.m_pin}, m_task{other.m_task}, m_mode{other.m_mode}, m_awaiting(other.m_awaiting)
 {
 
 }
-ExtiInput& ExtiInput::operator=(ExtiInput&& other)
+AsyncInput& AsyncInput::operator=(AsyncInput&& other)
 {
     if(&other != this)
     {
@@ -169,7 +169,7 @@ ExtiInput& ExtiInput::operator=(ExtiInput&& other)
     }
     return *this;
 }
-ExtiInput::~ExtiInput()
+AsyncInput::~AsyncInput()
 {
 
 }

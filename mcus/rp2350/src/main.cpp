@@ -28,7 +28,7 @@
 #include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
 #include "drivers/dma.hpp"
-#include "drivers/exti.hpp"
+#include "drivers/async_input.hpp"
 #include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
@@ -119,7 +119,7 @@ public:
 using embedded_hal::tests::input::ButtonAnyEdge;
 
  
-#include "drivers/exti_notifier.hpp"
+#include "drivers/async_input_handler.hpp"
 constexpr uint16_t PIN_20    = 20;
 constexpr size_t num_buttons = 1;
 
@@ -134,7 +134,7 @@ public:
     }
     void taskFunction() override
     {
-        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
         ButtonAnyEdge app{button};
         app.run();
     }

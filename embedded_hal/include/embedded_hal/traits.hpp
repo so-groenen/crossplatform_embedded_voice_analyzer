@@ -52,9 +52,9 @@ namespace embedded_hal
 namespace input 
 {
     template<class InputType>
-    concept IsExtiInput = std::move_constructible<InputType> && requires (InputType g) 
+    concept IsAsyncInput = std::move_constructible<InputType> && requires (InputType g) 
     {
-        {g.is_awaiting()} -> std::same_as<bool>;
+        // {g.is_awaiting()} -> std::same_as<bool>;
         {g.wait_for_rising_edge()} -> std::same_as<void>;
         {g.wait_for_falling_edge()}-> std::same_as<void>;
         {g.wait_for_any_edge()}-> std::same_as<void>;
