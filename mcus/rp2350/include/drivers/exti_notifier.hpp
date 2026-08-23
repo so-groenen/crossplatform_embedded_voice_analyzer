@@ -3,30 +3,34 @@
 #include "FreeRTOS/Task.hpp"
 // #include "drivers/interface_exti_notifier.hpp"
 #include "drivers/exti.hpp"
+#include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <array>
+
+
 
 template<size_t N>
 class Notifier : public IExtiNotifier
 {
-    std::array<ExtiInput*, N> m_buttons{};
+    std::array<uint16_t, N> m_pins{};
     std::array<PicoTask*, N> m_tasks{};
     irq_handler_t m_handler{};
     size_t n_btns{};
-    void _handle_isr(const ExtiInput* btn, PicoTask* task)
-    {
-        if (gpio_get_irq_event_mask(btn->pin()) & btn->mode()) 
-        {
-            gpio_acknowledge_irq(btn->pin(), btn->mode());
-            if(task && btn->is_awaiting()) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
-            {
-                bool higherPriorityTaskWoken = false;
-                task->notifyGiveFromISR(higherPriorityTaskWoken);
-                if(higherPriorityTaskWoken)
-                    FreeRTOS::Kernel::yield();
-            }
-        }
-    }
+    // void handle_individual_isr(const ExtiInput* btn, PicoTask* task)
+    // {
+    //     if (gpio_get_irq_event_mask(btn->pin()) & ExtiInput::all_irq) 
+    //     {
+    //         gpio_acknowledge_irq(btn->pin(), ExtiInput::all_irq);
+    //         // gpio_set_irq_enabled(btn->pin(), ExtiInput::all_irq, false);
+    //         if(task /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
+    //         {
+    //             bool higherPriorityTaskWoken = false;
+    //             task->notifyGiveFromISR(higherPriorityTaskWoken);
+    //             if(higherPriorityTaskWoken)
+    //                 FreeRTOS::Kernel::yield();
+    //         }
+    //     }
+    // }
 
 public:
     explicit Notifier(irq_handler_t handler)
@@ -43,8 +47,8 @@ public:
     {
         if(n_btns < N && btn && task)
         {
-            m_buttons[n_btns] = btn;
-            m_tasks[n_btns]   = task;
+            m_pins[n_btns]  = btn->pin();
+            m_tasks[n_btns] = task;
             n_btns++;
 
             // irq_set_enabled(IO_IRQ_BANK0, false);
@@ -60,8 +64,19 @@ public:
     {
         for (size_t n = 0; n < n_btns; ++n)
         {
-            if(m_buttons[n] && m_tasks[n])
-                _handle_isr(m_buttons[n], m_tasks[n]);
+            if (gpio_get_irq_event_mask(m_pins[n]) & ExtiInput::all_irq) 
+            {
+                gpio_acknowledge_irq(m_pins[n], ExtiInput::all_irq);
+                // gpio_set_irq_enabled(btn->pin(), ExtiInput::all_irq, false);
+                if(m_tasks[n] /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
+                {
+                    bool higherPriorityTaskWoken = false;
+                    m_tasks[n]->notifyGiveFromISR(higherPriorityTaskWoken);
+                    if(higherPriorityTaskWoken)
+                        FreeRTOS::Kernel::yield();
+                }
+            }
+            
         }
     }
 };

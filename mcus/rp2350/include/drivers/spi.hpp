@@ -349,9 +349,8 @@ namespace rtos
         }
         void transfer_await(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff)
         {
-            m_dma_tx.enable_channel(false);
-            m_dma_rx.enable_channel(true);
-            
+            m_dma_tx.enable_channel(false);                // Disable so that only one interrupt fire!
+                                                           // reeset it back in write_awaitZZ
             m_dma_tx.write_to_spi(m_spi, tx_buff, false);
             m_dma_rx.read_from_spi(m_spi, rx_buff, false);
 

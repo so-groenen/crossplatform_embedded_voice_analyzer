@@ -46,6 +46,7 @@ public:
     ExtiInput& operator=(ExtiInput&& other);
     ~ExtiInput();
 
+    static constexpr uint32_t all_irq = GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE|GPIO_IRQ_LEVEL_HIGH|GPIO_IRQ_LEVEL_LOW;
 };
 
 static_assert(embedded_hal::input::IsInput<ExtiInput>, "must implement Input traits");

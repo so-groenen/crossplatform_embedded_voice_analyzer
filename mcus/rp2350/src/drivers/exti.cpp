@@ -6,20 +6,21 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <hardware/gpio.h>
 
 
-
+static constexpr uint32_t all_irq = GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE|GPIO_IRQ_LEVEL_HIGH|GPIO_IRQ_LEVEL_LOW;
  
 
 void ExtiInput::set_mode(uint32_t new_mode)
 {
-    irq_set_enabled(IO_IRQ_BANK0, false);
-    gpio_set_irq_enabled(m_pin, m_mode, false);
+    // irq_set_enabled(IO_IRQ_BANK0, false);
+    // gpio_acknowledge_irq(m_pin, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
     m_mode = new_mode;
-    gpio_set_irq_enabled(m_pin, m_mode, true);
-    irq_set_enabled(IO_IRQ_BANK0, true);
+    gpio_set_irq_enabled(m_pin, new_mode, true);
+    // irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 
@@ -42,6 +43,8 @@ ExtiInput::ExtiInput(uint16_t pin, Pull pull, PicoTask* task, IExtiNotifier& not
     }
 
     notifier.bind_interrupt_from_rtos(this, task);
+    gpio_set_irq_enabled(m_pin, m_mode, false);
+
 
 }
 bool ExtiInput::is_awaiting() const
@@ -58,56 +61,81 @@ uint32_t ExtiInput::mode() const
 }
 void ExtiInput::wait_for_rising_edge()
 {
-    if(m_mode != GPIO_IRQ_EDGE_RISE)
+    // if(m_mode != GPIO_IRQ_EDGE_RISE)
         set_mode(GPIO_IRQ_EDGE_RISE);
 
-    m_awaiting = true;
+    // m_awaiting = true;
+    // m_task->awaitNotifs();
+    // m_awaiting = false;
+
+    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_RISE, true);
+
+    // m_awaiting = true;
     m_task->awaitNotifs();
-    m_awaiting = false;
+    gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
+    gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
+
 }
 void ExtiInput::wait_for_falling_edge()
 {
-    if(m_mode != GPIO_IRQ_EDGE_FALL)
-        set_mode(GPIO_IRQ_EDGE_FALL);
+    // if(m_mode != GPIO_IRQ_EDGE_FALL)
+    // set_mode(GPIO_IRQ_EDGE_FALL);
+    // gpio_acknowledge_irq(m_pin, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL, true);
 
-    m_awaiting = true;
+    // m_awaiting = true;
     m_task->awaitNotifs();
-    m_awaiting = false;
+    gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
+    gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
+    // m_awaiting = false;
 }
 void ExtiInput::wait_for_any_edge()
 {
-    if(m_mode != (GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE))
-        set_mode(GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE);
+    // if(m_mode != (GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE))
+    // set_mode(GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE);
+    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE, true);
 
-    m_awaiting = true;
-    m_task->awaitNotifs();
-    m_awaiting = false;
+    // m_awaiting = true;
+    // gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE, true);
+    // gpio_set_irq_enabled
+    // gpio_acknowledge_irq(m_pin, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    // gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE, true);
+    m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
+    gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
+    gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
+    // m_awaiting = false;
 }
 
 void ExtiInput::wait_for_high()
 {
-    if(m_mode != (GPIO_IRQ_LEVEL_HIGH))
-        set_mode(GPIO_IRQ_LEVEL_HIGH);
+    // if(m_mode != (GPIO_IRQ_LEVEL_HIGH))
+    //     set_mode(GPIO_IRQ_LEVEL_HIGH);
 
     if(is_high())
         return;
 
-    m_awaiting = true;
-    m_task->awaitNotifs();
-    m_awaiting = false;
+    gpio_set_irq_enabled(m_pin, GPIO_IRQ_LEVEL_HIGH, true);
+    m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
+    gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
+    gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
 }
 
 void ExtiInput::wait_for_low()
 {
-    if(m_mode != (GPIO_IRQ_LEVEL_LOW))
-        set_mode(GPIO_IRQ_LEVEL_LOW);
+    // if(m_mode != (GPIO_IRQ_LEVEL_LOW))
+    //     set_mode(GPIO_IRQ_LEVEL_LOW);
 
     if(is_low())
         return;
     
-    m_awaiting = true;
-    m_task->awaitNotifs();
-    m_awaiting = false;
+    gpio_set_irq_enabled(m_pin, GPIO_IRQ_LEVEL_LOW, true);
+    m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
+    gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
+    gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
+
+    // m_awaiting = true;
+    // m_task->awaitNotifs();
+    // m_awaiting = false;
 }
 
 

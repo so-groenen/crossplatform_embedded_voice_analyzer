@@ -62,111 +62,7 @@ bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
 using spi::rtos::SpiAsync;
 using spi::base::SpiDma;
 using spi::Mode;
-
-// class HelloDmaRtosTask : public PicoTask
-// {
-// public:
-//     HelloDmaRtosTask()
-//         : PicoTask(1, 512, "DMA-test-task")
-//     {
-//         auto config = spi::Config::create_default();
-//         config.baudrate = 1000 * 1000;
-//         spi::Spi::init_from_config(spi_default, config);
-
-//         gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
-//         gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
-//         gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
-//         gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
-
-//         // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
-//         hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
-//     }
-
-//     static void check_buffs(std::span<uint8_t> rbuff, std::span<uint8_t> tbuff)
-//     {
-//         printf("Done. Checking...");
-//         for (uint i = 0; i < rbuff.size(); ++i) 
-//         {
-//             if (rbuff[i] != rbuff[i]) 
-//             {
-//                 panic("Mismatch at %d/%d: expected %02x, got %02x",
-//                     i, TEST_SIZE, tbuff[i], rbuff[i]
-//                 );
-//             }
-//         } 
-//         printf("All good!\n");
-//     }
-
-//     static void randomize_buff(std::span<uint8_t> rbuff)
-//     {
-//         for (uint i = 0; i < TEST_SIZE; ++i) 
-//         {
-//             rbuff[i] = rand();
-//         }
-
-//     }
-    
-//     void taskFunction() override
-//     {
-//         static uint8_t txbuf[TEST_SIZE];
-//         static uint8_t rxbuf[TEST_SIZE];
-
-//         // SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
-//         spi::rtos::SpiAsyncFull spi_rxtx{spi_default, Dma{DMA_CH0}, Dma{DMA_CH1}, this, irqs};
-//         // SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
-        
-    
-//         if(!dma_channel_is_claimed(DMA_CH0))
-//             panic("channel 0 not claimed");
-
-//         if(!dma_channel_is_claimed(DMA_CH1))
-//             panic("channel 1 not claimed");
-
-
-//         Rtos_sleep_ms(3000);
-//         printf("-- DMA TESTS -- [baudrate:%u]\n", spi_rxtx.baudrate());
-//         Rtos_sleep_ms(3000);
-
-//         // We set the outbound DMA to transfer from a memory buffer to the SPI transmit FIFO paced by the SPI TX FIFO DREQ
-//         // The default is for the read address to increment every element (in this case 1 byte = DMA_SIZE_8)
-//         // and for the write address to remain unchanged.
-//         while(true)
-//         {
-//             printf("Full async transfer \n");
-//             randomize_buff(txbuf);
-//             spi_rxtx.transfer_await(rxbuf, txbuf);
-//             // notifyTake();
-
-//             check_buffs(rxbuf, txbuf);
-//             Rtos_sleep_ms(3000);
-
-//             // printf("-- DMA basic transfer \n");
-//             // randomize_buff(txbuf);
-
-            
-//             // spi_tx.write_async(txbuf, true); // Use DMA to transfer data under the hood
-//             // spi_rx.read_await(rxbuf);        // this one blocks and await interrupts
-//             //                                  // interrupt is hoocked up to channel 0, so the other one will not trigger any problems.
  
-//             // if (spi_tx.dma().is_busy())
-//             // {
-//             //     panic("RX completed before TX");
-//             // }
-//             // check_buffs(rxbuf, txbuf);
-//             // Rtos_sleep_ms(3000);
-
-
-//             // printf("-- DMA inplace transfer -- \n");
-//             // randomize_buff(txbuf);
-
-//             // auto res = spi_tx.transfer_blocking(rxbuf, txbuf);
-//             // if(!res)
-//             //     panic("transfer error!");
-//             // check_buffs(rxbuf, txbuf);
-//             // Rtos_sleep_ms(3000);
-//         }
-//     }
-// };
 
 using embedded_hal::tests::async::AsyncTransferApp;
 using spi::rtos::SpiAsyncFull;
@@ -220,7 +116,7 @@ public:
 
 
 
-using embedded_hal::tests::input::ButtonApp;
+using embedded_hal::tests::input::ButtonAnyEdge;
 
  
 #include "drivers/exti_notifier.hpp"
@@ -239,7 +135,7 @@ public:
     void taskFunction() override
     {
         ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
-        ButtonApp app{button};
+        ButtonAnyEdge app{button};
         app.run();
     }
 };
@@ -253,21 +149,6 @@ public:
 int main() 
 {
     stdio_init_all();
-
-
-    // auto config = spi::Config::create_default();
-    // config.baudrate = 1000 * 1000;
-    // spi::Spi::init_from_config(spi_default, config);
-
-    // gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
-    // gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
-    // gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
-    // gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
-
-    // // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
-    // hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
-
-    // HelloDmaRtosTask dma_task{};
 
     constexpr uint32_t stats_ms{10'000};
     StatsTask stats{stats_ms};

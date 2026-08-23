@@ -91,5 +91,11 @@ if(BUILD_TESTS)
         src/drivers/exti.cpp
     )
     configure_picor_rtos_target(test_rtos_spi)
+
+    add_executable(test_embedded_hal
+        src/tests/embedded_hal_test.cpp 
+        src/drivers/exti.cpp
+    )
+    configure_picor_rtos_target(test_embedded_hal)
 endif()
  

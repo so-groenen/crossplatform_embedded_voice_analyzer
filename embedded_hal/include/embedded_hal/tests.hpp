@@ -102,6 +102,13 @@ namespace async
 
                 check_buffs(rxbuf, txbuf);
                 FreeRTOS::Task::delay(pdMS_TO_TICKS(3000));
+
+
+                printf("-- spi async try blocking transfer -- \n");
+                randomize_buff(txbuf);
+                m_spi.transfer_blocking(rxbuf, txbuf);
+                check_buffs(rxbuf, txbuf);
+                FreeRTOS::Task::delay(pdMS_TO_TICKS(3000));
             }
         }
     };
@@ -142,11 +149,11 @@ namespace input
     using namespace embedded_hal::input;
 
     template<IsInput Button>
-    class ButtonApp
+    class ButtonAnyEdge
     {
         Button& m_button;
     public:
-        ButtonApp(Button& button)
+        ButtonAnyEdge(Button& button)
             : m_button(button)
         {
         }
@@ -155,6 +162,50 @@ namespace input
             while (true)
             {
                 m_button.wait_for_any_edge();
+                puts("Click!");
+                FreeRTOS::Task::delay(pdMS_TO_TICKS(10));       
+            }
+        }
+    };
+
+    template<IsInput Button, output::IsOutput Led>
+    class ButtonFallBlinkApp
+    {
+        Button& m_button;
+        Led& m_led;
+    public:
+        ButtonFallBlinkApp(Button& button, Led& led)
+            : m_button(button), m_led(led)
+        {
+        }
+        void run()
+        {
+            while (true)
+            {
+                m_button.wait_for_falling_edge();
+                m_led.toggle();
+                puts("Click!");
+                FreeRTOS::Task::delay(pdMS_TO_TICKS(10));       
+            }
+        }
+    };
+
+    template<IsInput Button, output::IsOutput Led>
+    class ButtonRaiseBlinkApp
+    {
+        Button& m_button;
+        Led& m_led;
+    public:
+        ButtonRaiseBlinkApp(Button& button, Led& led)
+            : m_button(button), m_led(led)
+        {
+        }
+        void run()
+        {
+            while (true)
+            {
+                m_button.wait_for_rising_edge();
+                m_led.toggle();
                 puts("Click!");
                 FreeRTOS::Task::delay(pdMS_TO_TICKS(10));       
             }

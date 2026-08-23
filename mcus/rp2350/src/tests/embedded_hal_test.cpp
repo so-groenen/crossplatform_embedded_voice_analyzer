@@ -28,6 +28,7 @@
 #include "FreeRTOSConfig.h"
 #include "counter_task.hpp"
 #include "drivers/dma.hpp"
+#include "drivers/exti.hpp"
 #include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
@@ -41,11 +42,12 @@
 #include "drivers/dma_irq_handler.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
+#include "drivers/exti_notifier.hpp"
+
 
 
 constexpr size_t TEST_SIZE  = 1024;
 constexpr size_t N_CHANNELS = 2; // only one channel fire's interrupt!
-
 constexpr uint DMA_CH0      = 0;
 constexpr uint DMA_CH1      = 1;
 
@@ -57,21 +59,38 @@ constexpr uint DMA_CH1      = 1;
 bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
 
 
- 
+
+using spi::rtos::SpiAsync;
+using spi::base::SpiDma;
+using spi::Mode;
+
 
 using embedded_hal::tests::async::AsyncTransferApp;
 using spi::rtos::SpiAsyncFull;
 
 class TransferTask : public PicoTask
 {
-    AsyncTransferApp<SpiAsyncFull> app;
+
 public:
-    TransferTask(spi_inst_t* inst)
-        : app{SpiAsyncFull{inst, Dma{DMA_CH0}, Dma{DMA_CH1}, this, irqs}}
+    TransferTask()
+        : PicoTask(2, 512, "transfer-task")
     {
+        auto config = spi::Config::create_default();
+        config.baudrate = 1000 * 1000;
+        spi::Spi::init_from_config(spi_default, config);
+
+        gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
+        gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
+        gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
+        gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
+
+        // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
+        hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
     }
     void taskFunction() override
     {
+        SpiAsyncFull spi{spi_default, Dma{DMA_CH0}, Dma{DMA_CH1}, this, irqs};
+        AsyncTransferApp<SpiAsyncFull> app{spi};
         app.run();
     }
 };
@@ -90,36 +109,93 @@ public:
     }
     void taskFunction() override
     {
-        BlinkyApp app{pico2_w::WifiOutput{}, blink_ms};
+        pico2_w::WifiOutput led{};
+        BlinkyApp app{led, blink_ms};
         app.run();
     }
 };
+
+
+
+
+constexpr uint16_t PIN_20    = 20;
+constexpr size_t num_buttons = 1;
+
+bind_interrupt_EXTI(exti_irq, exti_handler, num_buttons);
+
+using embedded_hal::tests::input::ButtonAnyEdge;
+
+class ButtonAnyTask : public PicoTask
+{
+public:
+    ButtonAnyTask()
+        : PicoTask{2, 256, "button-any-task"}
+    {
+    }
+    void taskFunction() override
+    {
+        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        ButtonAnyEdge app{button};
+        app.run();
+    }
+};
+
+using embedded_hal::tests::input::ButtonRaiseBlinkApp;
+
+class ButtonRaiseBlinkTask : public PicoTask
+{
+public:
+    ButtonRaiseBlinkTask()
+        : PicoTask{2, 256, "button-raise-task"}
+    {
+    }
+    void taskFunction() override
+    {
+        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        pico2_w::WifiOutput led{};
+        ButtonRaiseBlinkApp app{button, led};
+        app.run();
+    }
+};
+
+using embedded_hal::tests::input::ButtonFallBlinkApp;
+
+class ButtonFallBlinkTask : public PicoTask
+{
+public:
+    ButtonFallBlinkTask()
+        : PicoTask{2, 256, "button-fall-task"}
+    {
+    }
+    void taskFunction() override
+    {
+        ExtiInput button{PIN_20, Pull::Up, this, exti_irq};
+        pico2_w::WifiOutput led{};
+        ButtonFallBlinkApp app{button, led};
+        app.run();
+    }
+};
+
+
+
+
+
+
 
 int main() 
 {
     stdio_init_all();
 
-
-    auto config = spi::Config::create_default();
-    config.baudrate = 1000 * 1000;
-    spi::Spi::init_from_config(spi_default, config);
-
-    gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
-    gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
-    gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
-    gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
-
-    // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
-    hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
-
-    // HelloDmaRtosTask dma_task{};
-
     constexpr uint32_t stats_ms{10'000};
     StatsTask stats{stats_ms};
-    TransferTask transfer_task{spi_default};
-    BlinkyTask blinky_task{};
-    // constexpr uint32_t counter_ms{500};
-    // CounterTask counter_task{counter_ms, "counter-tsk"};
+
+    TransferTask transfer_task{};
+    // ButtonAnyTask blinky_task{};
+    ButtonFallBlinkTask button_task{};
+    // ButtonRaiseBlinkTask button_task{};
+
+    constexpr uint32_t counter_ms{500};
+    CounterTask counter_task{counter_ms, "counter-tsk"};
     FreeRTOS::Kernel::startScheduler();
     while(true)
     {
