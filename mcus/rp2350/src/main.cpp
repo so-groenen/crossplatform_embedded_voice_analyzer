@@ -91,7 +91,7 @@ public:
     inline void handle_inst(size_t n) override 
     {
         m_is_ready   = true;
-        printf("Hello I2S\n");
+        // printf("Hello I2S\n");
     }
     bool& ready_flag()
     {
@@ -99,82 +99,130 @@ public:
     }
 };
 
-struct I2S_Config 
+struct PioI2sConfig 
 {
     uint32_t sample_rate;
     uint32_t sck_pin;
     uint32_t ws_pin;
     uint32_t data_pin;
 };
-
-template<std::integral T>
-class I2S_RX 
+class PioBaseProgram
 {
-    Dma m_dma{};
+protected:
     PIO m_pio_inst{pio0};
     uint m_pio_sm;
-    bool& m_is_ready;
-    size_t m_processed_buff{};
-    std::span<T> m_ping_pong[2];
+    uint m_offset{};
 public:
-    I2S_RX(PIO inst,
-            const I2S_Config& config, 
-            std::span<T> ping, 
-            std::span<T> pong,
-            bool& ready_flag, base::IDmaHandler& irq)
-        : m_pio_inst(inst), m_pio_sm(pio_claim_unused_sm(m_pio_inst, true)), m_is_ready(ready_flag)
+    PioBaseProgram(PIO inst, const pio_program* program)
+        : m_pio_inst{inst}, m_pio_sm(pio_claim_unused_sm(m_pio_inst, true)), m_offset(pio_add_program(m_pio_inst, program))
     {
-        assert(config.ws_pin == config.sck_pin +1);
-
-        uint offset = pio_add_program(m_pio_inst, &i2s_pio_program);
-        i2s_pio_program_init(m_pio_inst, m_pio_sm, offset, config.sample_rate, config.data_pin, config.sck_pin);
-
-        m_dma.read_from_memory(false);
-        m_dma.write_to_memory(true);
-        m_dma.set_data_request(pio_get_dreq(m_pio_inst, m_pio_sm, false));
-        init_ping_pong_buff(ping, pong);
-
-        irq.bind_interrupt(&m_dma);
-
+        // uint m_offset = pio_add_program(m_pio_inst, program);
     }
-    // template<std::integral T>
-    void init_ping_pong_buff(std::span<T> ping, std::span<T> pong)
+    PIO pio_inst() const 
     {
-        assert(ping.size() == pong.size());
-
-        m_dma.infer_transfer_size(ping);
-        m_dma.config_transfer(
-            /*dest:*/ ping.data(),
-            /*src:*/  &m_pio_inst->rxf[m_pio_sm],
-            /*len:*/  ping.size());
-        m_ping_pong[0] = ping;
-        m_ping_pong[1] = pong;
+        return m_pio_inst;
+    }
+    uint pio_sm() const 
+    {
+        return m_pio_sm;
+    }
+    io_ro_32* get_tx_fifo_reg() 
+    {
+        return &m_pio_inst->rxf[m_pio_sm];
+    }
+    io_ro_32* get_rx_fifo_reg() 
+    {
+        return &m_pio_inst->rxf[m_pio_sm];
+    }
+    uint get_dreq( bool is_tx)
+    {
+        return pio_get_dreq(m_pio_inst, m_pio_sm, is_tx);
     }
     void start()
     {
         pio_sm_clear_fifos(m_pio_inst, m_pio_sm);
         pio_sm_restart(m_pio_inst, m_pio_sm);
-
-        // Enable state machine to start generating clocks and sampling
         pio_sm_set_enabled(m_pio_inst, m_pio_sm, true);
-        m_processed_buff = 0;
-        m_dma.start();
     }
     void stop()
     {
         pio_sm_set_enabled(m_pio_inst, m_pio_sm, false);
+    } 
+};
+
+class PioI2sProgram : public PioBaseProgram
+{
+public:
+    PioI2sProgram(const PioI2sConfig& config)
+        : PioBaseProgram(pio0, &i2s_pio_program)
+    {
+        assert(config.ws_pin == config.sck_pin +1);
+        i2s_pio_program_init(m_pio_inst, m_pio_sm, m_offset, config.sample_rate, config.data_pin, config.sck_pin);
+    }
+};
+
+template<typename T>
+concept IsPioI2S = requires (T pio, bool is_tx) {
+    {pio.start()} -> std::same_as<void>;
+    {pio.stop()} -> std::same_as<void>;
+    {pio.get_tx_fifo_reg()} -> std::same_as<io_ro_32*>;
+    {pio.get_rx_fifo_reg()} -> std::same_as<io_ro_32*>;
+    {pio.get_dreq(is_tx)} -> std::same_as<uint>;
+};
+
+
+template<std::integral T, IsPioI2S P>
+class I2S_RX 
+{
+    Dma m_dma{};
+    P& m_pio{};
+    size_t m_processed_buff{};
+    std::span<T> m_ping_pong[2];
+public:
+    I2S_RX(P& pio_,
+            // const I2S_Config& config, 
+            std::span<T> ping, 
+            std::span<T> pong,
+            base::IDmaHandler& irq)
+        : m_pio(pio_) //, m_pio_sm(pio_claim_unused_sm(m_pio_inst, true))
+    {
+        // assert(config.ws_pin == config.sck_pin +1);
+        assert(ping.size() == pong.size());
+
+        // uint offset = pio_add_program(m_pio_inst, &i2s_pio_program);
+        // i2s_pio_program_init(m_pio_inst, m_pio_sm, offset, config.sample_rate, config.data_pin, config.sck_pin);
+
+        m_dma.read_from_memory(false);
+        m_dma.write_to_memory(true);
+        m_dma.set_data_request(m_pio.get_dreq(false));
+        m_dma.config_transfer(
+            /*dest:*/ ping,
+            /*src:*/  m_pio.get_rx_fifo_reg());
+        m_dma.set_transfer_size<T>();
+        m_ping_pong[0] = ping;
+        m_ping_pong[1] = pong;
+        irq.bind_interrupt(&m_dma);
+    }
+    void start()
+    {
+        m_pio.start();
+        m_dma.start();
+    }
+    void stop()
+    {
+        m_pio.stop();
         m_dma.abort();
     }
-    auto await_buff_blocking() -> std::span<T>
+    inline auto read_blocking(bool& is_ready) -> std::span<T>
     {
-        while(!m_is_ready)
+        while(!is_ready)
         {
             tight_loop_contents();
         }
-        m_is_ready        = false;
         m_processed_buff ^= 1; 
-        m_dma.set_write(m_ping_pong[m_processed_buff].data(), true);
-        return m_ping_pong[m_processed_buff ^ 1]; 
+        m_dma.set_write_addr(m_ping_pong[m_processed_buff].data(), true);
+        is_ready = false;
+        return m_ping_pong[m_processed_buff ^ 1];
     }
 };
 
@@ -297,9 +345,8 @@ int main()
     std::span pong{ARENA + BUFF_SIZE, BUFF_SIZE};
     // std::span samples{SAMPLES};
     std::array<std::span<uint32_t>,2> ping_pong = {ping, pong};
-    size_t curr{};
 
-    I2S_Config config
+    PioI2sConfig config
     {
         .sample_rate = 16'000,
         .sck_pin     = 20,
@@ -307,47 +354,29 @@ int main()
         .data_pin    = 22,
     };
 
+    PioI2sProgram pio_{config};
+    I2S_RX i2s{
+        pio_,
+        ping,
+        pong,
+        irq};
     
-    // I2S_RX i2s{
-    //     pio0,
-    //     config, 
-    //     ping,
-    //     pong,
-    //     irq.read_flag(), 
-    //     irq};
-    
-    // i2s.start();
-
-    PIO pio_inst = pio0;
-    uint sm  = pio_claim_unused_sm(pio_inst, true);
-    uint offset = pio_add_program(pio_inst, &i2s_pio_program);
-    i2s_pio_program_init(pio_inst, sm, offset, config.sample_rate, config.data_pin, config.sck_pin);
-
-    sleep_ms(5000);
-    Dma dma{};
-    dma.read_from_memory(false);
-    dma.write_to_memory(true);
-    dma.set_data_request(pio_get_dreq(pio_inst, sm, false));
-    dma.set_transfer_size(DMA_SIZE_32);
-    irq.bind_interrupt(&dma);
-
-    dma.config_transfer(/*dest:*/ ping_pong[curr].data(),/*src:*/  &pio_inst->rxf[sm], ping.size());
-            
-    pio_sm_clear_fifos(pio_inst, sm);
-    pio_sm_restart(pio_inst, sm);
-    pio_sm_set_enabled(pio_inst, sm, true);
-    // dma.start();
-    dma.set_write(ping_pong[curr].data(), true);
+    i2s.start(); 
 
     while(true)
     {
-        if(irq.ready_flag())
-        {
-            curr ^= 1;
-            dma.set_write(ping_pong[curr].data(), true);
-            irq.ready_flag() = false;
-            // curr? printf("Ping!\n") : printf("pong!\n");
-        }
+        std::span<uint32_t> raw_data = i2s.read_blocking(irq.ready_flag());
+        printf("PING! \n");
+        std::span<uint32_t> _raw_data = i2s.read_blocking(irq.ready_flag());
+        printf("PONG! \n");
+        
+        // if(irq.ready_flag())
+        // {
+        //     curr ^= 1;
+        //     dma.set_write(ping_pong[curr].data(), true);
+        //     irq.ready_flag() = false;
+        //     // curr? printf("Ping!\n") : printf("pong!\n");
+        // }
 
         // tight_loop_contents();
         // sleep_ms(1000);
