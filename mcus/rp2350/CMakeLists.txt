@@ -19,10 +19,13 @@ target_include_directories(rp2350_rtos_config INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+
+
 target_link_libraries(rp2350_rtos_config INTERFACE 
     pico_stdlib
     pico_runtime
     pico_stdio_usb
+    hardware_pio
     pico_cyw43_arch_lwip_sys_freertos
     FreeRTOS-Kernel-Heap4
     embedded_hal
@@ -30,6 +33,8 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     hardware_spi 
     hardware_dma
 )
+pico_generate_pio_header(rp2350_rtos_config ${CMAKE_CURRENT_LIST_DIR}/src/drivers/i2s.pio)
+
 set(CMAKE_BUILD_TYPE Debug)
 
 
@@ -46,16 +51,22 @@ option(BUILD_TESTS "Build the example test targets" ON)
 #------------------------------------------------------------#
 function(configure_picor_rtos_target TARGET_NAME)
     target_link_libraries(${TARGET_NAME} PRIVATE rp2350_rtos_config)
-    pico_enable_stdio_usb(${TARGET_NAME} 1)
-    pico_enable_stdio_uart(${TARGET_NAME} 0)
+    pico_enable_stdio_usb(${TARGET_NAME} 0)
+    pico_enable_stdio_uart(${TARGET_NAME} 1)
     pico_add_extra_outputs(${TARGET_NAME})
 endfunction()
 
 
 
+#-------------#
+#    Drivers    #
+#-------------#
 set(DRIVER_SRC 
     src/drivers/input.cpp
-    src/drivers/async_input.cpp)
+    src/drivers/async_input.cpp
+    src/drivers/spi.cpp)
+
+
 
 if(BUILD_MAIN)
     add_executable(rp2350_main 

@@ -42,13 +42,13 @@
  
 namespace base
 {
-    class IAsyncDmaHandler
+    class IDmaHandler
     {
     public:
-        virtual ~IAsyncDmaHandler() = default;
-        // virtual void bind_interrupt() = 0;
+        virtual ~IDmaHandler() = default;
         virtual void bind_interrupt(Dma* dma) = 0;
         virtual void handle_isr() = 0;
+        virtual void handle_inst(size_t n) = 0;
     };
 }
 

@@ -2,6 +2,7 @@
 
 
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
@@ -15,6 +16,7 @@
 #include <pico/types.h>
 #include <span>
 #include <stddef.h>
+#include <type_traits>
  
 #include "hardware/dma.h"
  
@@ -30,8 +32,20 @@ public:
         : m_dma{channel}, m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
         dma_channel_claim(m_dma);
-        channel_config_set_transfer_data_size(&m_config, DMA_SIZE_8);
+        set_transfer_size(DMA_SIZE_8);
     }
+    explicit Dma()
+    {
+        auto r = dma_claim_unused_channel(true);
+        // if(r > 0)
+        // WILL PANIC IF IT FAILS
+        m_dma = static_cast<uint>(r);
+
+        dma_channel_claim(m_dma);
+        m_config = dma_channel_get_default_config(m_dma);
+        set_transfer_size(DMA_SIZE_8);
+    }
+    
     Dma(const Dma& other) = delete;
     Dma& operator=(Dma& other) = delete;
 
@@ -53,7 +67,94 @@ public:
         }
         return *this;
     }
-
+    void read_from_memory(bool v)
+    {
+        channel_config_set_read_increment(&m_config, v);
+    }
+    void set_data_request(uint dreq)
+    {
+        channel_config_set_dreq(&m_config, dreq);
+    }
+    void config_transfer(volatile void* write_addr, const volatile void* read_addr, size_t transfer_count)
+    {
+        dma_channel_configure(m_dma, &m_config,
+                                write_addr,           // write address
+                                read_addr,  // read address from memory
+                                transfer_count,  // element count (each element is of size transfer_data_size)
+                                false);     
+    }
+    template<std::integral T>
+    void config_transfer(std::span<T> write_buff, const std::span<T> read_buff)
+    {
+        dma_channel_configure(m_dma, &m_config,
+                                write_buff.data(),           // write address
+                                read_buff.data(),            // read address from memory
+                                read_buff.size(),       // element count (each element is of size transfer_data_size)
+                                false);     
+        
+        if constexpr (std::same_as<T, uint32_t>) 
+        {
+            set_transfer_size(DMA_SIZE_32);
+        }
+        else if constexpr (std::same_as<T, uint16_t>) 
+        {
+            set_transfer_size(DMA_SIZE_16);
+        }
+        else if constexpr (std::same_as<T, uint8_t>) 
+        {
+            set_transfer_size(DMA_SIZE_8);
+        }
+    }
+    // We read in memory FROM a buffer and send it to a register pointed to by write_addr
+    template<std::integral T>
+    void config_transfer(volatile void* write_addr, const std::span<T> read_buff)
+    {
+        dma_channel_configure(m_dma, &m_config,
+                                write_addr,           // write address
+                                read_buff.data(),            // read address from memory
+                                read_buff.size(),       // element count (each element is of size transfer_data_size)
+                                false);     
+        
+        if constexpr (std::same_as<T, uint32_t>) 
+        {
+            set_transfer_size(DMA_SIZE_32);
+        }
+        else if constexpr (std::same_as<T, uint16_t>) 
+        {
+            set_transfer_size(DMA_SIZE_16);
+        }
+        else if constexpr (std::same_as<T, uint8_t>) 
+        {
+            set_transfer_size(DMA_SIZE_8);
+        }
+    }
+    // We read from a register and write in memory to a buffer and set the length of that buffer
+    template<std::integral T>
+    void config_transfer(std::span<T> write_buff, const void* read_addr)
+    {
+        dma_channel_configure(m_dma, &m_config,
+                                write_buff.data(),           // write address
+                                read_addr,            // read address from memory
+                                write_buff.size(),       // element count (each element is of size transfer_data_size)
+                                false);     
+        
+        if constexpr (std::same_as<T, uint32_t>) 
+        {
+            set_transfer_size(DMA_SIZE_32);
+        }
+        else if constexpr (std::same_as<T, uint16_t>) 
+        {
+            set_transfer_size(DMA_SIZE_16);
+        }
+        else if constexpr (std::same_as<T, uint8_t>) 
+        {
+            set_transfer_size(DMA_SIZE_8);
+        }
+    }
+    void write_to_memory(bool v)
+    {
+        channel_config_set_write_increment(&m_config, v);
+    }
     void write(std::span<uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
     {
         channel_config_set_dreq(&m_config, dreq);
@@ -85,6 +186,30 @@ public:
     uint channel() const 
     {
         return m_dma;
+    }
+    void set_transfer_size(enum dma_channel_transfer_size transfer_size)
+    {
+        channel_config_set_transfer_data_size(&m_config, transfer_size);
+    }
+    template<std::integral T>
+    void infer_transfer_size(std::span<T> _buff)
+    {
+        if constexpr (std::same_as<T, uint32_t>) 
+        {
+            set_transfer_size(DMA_SIZE_32);
+        }
+        else if constexpr (std::same_as<T, uint16_t>) 
+        {
+            set_transfer_size(DMA_SIZE_16);
+        }
+        else if constexpr (std::same_as<T, uint8_t>) 
+        {
+            set_transfer_size(DMA_SIZE_8);
+        }
+        else  
+        {
+            
+        }
     }
     void await_blocking()
     {

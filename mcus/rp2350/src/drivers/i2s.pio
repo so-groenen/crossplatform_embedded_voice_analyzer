@@ -1,0 +1,60 @@
+.program i2s_pio
+.side_set 2
+
+// Side-set pins:
+// bit 0: SCK (clock)
+// bit 1: WS (word select / LRCLK)
+
+    set x, 30             side 0b00
+bitloop_left:
+    in  pins, 1           side 0b01   ; Read 31 bits of left channel
+    jmp x-- bitloop_left  side 0b00
+    in  pins, 1           side 0b01   ; Read 32nd bit of left channel
+
+    set x, 30             side 0b10
+bitloop_right:
+    in  pins, 1           side 0b11   ; Read 31 bits of right channel
+    jmp x-- bitloop_right side 0b10
+    in  pins, 1           side 0b11   ; Read 32nd bit of right channel
+
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void i2s_pio_program_init(PIO pio, uint sm, uint offset, uint sample_rate, uint data_pin, uint sck_pin) {
+    pio_sm_config sm_config = i2s_pio_program_get_default_config(offset);
+
+    // Set input and side-set pins
+    sm_config_set_in_pins(&sm_config, data_pin);
+    sm_config_set_sideset_pins(&sm_config, sck_pin);
+
+    // Shift left (false), autopush (true), push threshold (32)
+    sm_config_set_in_shift(&sm_config, false, true, 32);
+    // Join RX FIFO to double the depth to 8 words
+    sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_RX);
+
+    // Clock divisor calculation:
+    // SCK runs at sample_rate * 32 (bits per channel) * 2 (channels) = sample_rate * 64
+    // Each SCK period requires 2 PIO clock cycles (one high, one low)
+    // So the state machine clock must run at sample_rate * 64 * 2 = sample_rate * 128
+    uint32_t clk_sys_hz = clock_get_hz(clk_sys);
+    float div = (float)clk_sys_hz / (float)(sample_rate * 128);
+    sm_config_set_clkdiv(&sm_config, div);
+
+    // Init the state machine
+    pio_sm_init(pio, sm, offset, &sm_config);
+
+    // Set pin directions: data is input, clock and WS are outputs
+    pio_sm_set_consecutive_pindirs(pio, sm, data_pin, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, sck_pin, 2, true);
+
+    // Configure GPIOs for PIO control
+    pio_gpio_init(pio, data_pin);
+    pio_gpio_init(pio, sck_pin);
+    pio_gpio_init(pio, sck_pin + 1);
+
+    // SPH0645 requires data pin to be pulled down so that during tri-state (right channel or silent periods)
+    // it reads as 0 instead of floating.
+    gpio_pull_down(data_pin);
+}
+%}

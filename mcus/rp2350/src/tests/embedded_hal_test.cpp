@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/regs/intctrl.h>
@@ -23,6 +24,7 @@
 // #include "pico/stdlib.h"
 // #include "embedded_hal/traits.hpp"
 #include "FreeRTOS/Kernel.hpp"
+#include "FreeRTOS/Mutex.hpp"
 #include "counter_task.hpp"
 
 #include "drivers/gpio.hpp"
@@ -30,6 +32,7 @@
 #include "embedded_hal/traits.hpp"
 #include "embedded_hal/tests.hpp"
 #include "drivers/pico_task.hpp"
+#include "projdefs.h"
 #include "stats.hpp"
 
 #include "drivers/dma.hpp"
@@ -54,6 +57,85 @@ constexpr uint DMA_CH1      = 1;
 
 bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
 
+#include <concepts>
+
+
+template <class T, typename... Args>
+concept IsLogger = requires (T inst, std::format_string<Args...> fmt, Args&&... args)
+{
+    {inst.println(fmt, std::forward<Args>(args)...)} -> std::same_as<int>;
+    {inst.print(fmt, std::forward<Args>(args)...)} -> std::same_as<int>;
+};
+
+ 
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+    /* Handle stack overflow here */
+    (void)xTask;
+    (void)pcTaskName;
+
+    // Breakpoint or infinite loop for debugging on the RP2350
+    __asm volatile("bkpt #0");
+    while (1) {
+        // You can also blink an LED or print to UART/USB here
+    }
+}
+
+
+namespace embedded {
+template<size_t N>
+class Logger 
+{
+    // FreeRTOS::Mutex mutex{};
+    std::array<char, N> buff{};
+public:
+    template <typename... Args>
+    int print(std::format_string<Args...> fmt, Args&&... args)
+    {
+        // mutex.lock();
+        auto result = std::format_to_n(buff.data(), N-1, fmt, std::forward<Args>(args)...);
+        *result.out = '\0';
+
+        int succes = printf("%s", buff.data());
+        // mutex.unlock();
+        return succes;
+    }
+    template <typename... Args>
+    int println(std::format_string<Args...> fmt, Args&&... args)
+    {
+        // mutex.lock();
+        auto result = std::format_to_n(buff.data(), N - 2, fmt, std::forward<Args>(args)...);
+
+        *result.out++ = '\n';
+        *result.out = '\0';
+        
+        int succes = printf("%s", buff.data());
+        // mutex.unlock();
+        return succes;
+    }
+};
+}
+static_assert(IsLogger<embedded::Logger<64>> && "is logger");
+
+static embedded::Logger<64> logger{};
+
+// template<IsLogger L>
+class LoggerTask : public PicoTask
+{
+    embedded::Logger<64>& m_logger;
+public:
+    LoggerTask(embedded::Logger<64>& logger)
+        : PicoTask(1, 512, "logger-task"), m_logger(logger)
+    {
+    }
+    void taskFunction() override
+    {
+        while (true)
+        {
+            m_logger.println("Hello world! {}", 42);
+            delay(pdMS_TO_TICKS(500));
+        }
+    }
+};
 
 
 using spi::rtos::SpiAsync;
@@ -182,14 +264,15 @@ int main()
 {
     stdio_init_all();
 
-    constexpr uint32_t stats_ms{10'000};
-    StatsTask stats{stats_ms};
+    // constexpr uint32_t stats_ms{10'000};
+    // StatsTask stats{stats_ms};
 
     TransferTask transfer_task{};
-    // ButtonAnyTask blinky_task{};
-    ButtonFallBlinkTask button_task{};
-    // ButtonRaiseBlinkTask button_task{};
+    ButtonAnyTask blinky_task{};
+    // ButtonFallBlinkTask button_task{};
+    // // ButtonRaiseBlinkTask button_task{};
 
+ 
     constexpr uint32_t counter_ms{500};
     CounterTask counter_task{counter_ms, "counter-tsk"};
     FreeRTOS::Kernel::startScheduler();

@@ -51,13 +51,10 @@ using embedded_hal::heapless::Vector;
 
 
  
-
-   
-namespace base   
-{
+ 
 
 template<DmaIrq IRQ_n, size_t N_Channels>
-class AsyncDmaHandler: public base::IAsyncDmaHandler
+class DmaHandlerBase: public base::IDmaHandler
 {
 public:
     irq_handler_t m_handler{};
@@ -74,15 +71,6 @@ public:
             return(dma_hw->ints1 & (1u << m_dma_channels[n]));
 
         }
-        else if constexpr (IRQ_n == DmaIrq::IRQ_2)
-        {
-            return(dma_hw->ints2 & (1u << m_dma_channels[n]));
-
-        }
-        else if constexpr (IRQ_n == DmaIrq::IRQ_3)
-        {
-            return(dma_hw->ints3 & (1u << m_dma_channels[n]));
-        }
     }
     void acknowledge_isr(size_t n)
     {
@@ -94,16 +82,8 @@ public:
         {
             dma_hw->ints1 = (1u << m_dma_channels[n]);
         }
-        else if constexpr (IRQ_n == DmaIrq::IRQ_2)
-        {
-            dma_hw->ints2 = (1u << m_dma_channels[n]);
-        }
-        else if constexpr (IRQ_n == DmaIrq::IRQ_3)
-        {
-            dma_hw->ints3 = (1u << m_dma_channels[n]);
-        }
     }
-    explicit AsyncDmaHandler(irq_handler_t handler)
+    explicit DmaHandlerBase(irq_handler_t handler)
         : m_handler(handler)//, m_irqn(irqn)
     {
     }
@@ -118,32 +98,34 @@ public:
         irq_set_exclusive_handler(static_cast<irq_num_t>(IRQ_n), m_handler);
         irq_set_enabled(static_cast<irq_num_t>(IRQ_n), true);
     }
+    inline void handle_inst(size_t n) override 
+    {
+        printf(">>>> Hello From Interrupt \n");
+    }
     void handle_isr() override
     {   
         for(size_t n = 0; n < this->m_dma_channels.size(); n++)
         {
             if(this->is_event(n))
             {
-                printf(">>>> Hello From Interrupt \n");
                 this->acknowledge_isr(n);
+                handle_inst(n);
             }
         }
     }
 };
-}
-
-
+ 
 
 
 namespace rtos 
 {
 template<DmaIrq IRQ_n, size_t N>
-class AsyncDmaHandler : public base::AsyncDmaHandler<IRQ_n, N> , public rtos::IAsyncDmaHandler
+class AsyncDmaHandler : public DmaHandlerBase<IRQ_n, N> , public rtos::IAsyncDmaHandler
 {
     Vector<PicoTask*, N> m_tasks{};
 public:
     explicit AsyncDmaHandler(irq_handler_t handler)
-        : base::AsyncDmaHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
+        : DmaHandlerBase<IRQ_n, N>(handler)//, m_irqn(irqn)
     {
     }
     void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) override
@@ -154,24 +136,35 @@ public:
         if (m_tasks.size() != this->m_dma_channels.size())
             panic("DMA handler: Task vs DMA channel mismatch!");
     }
-    void handle_isr() override
-    {   
-        for(size_t n = 0; n < this->m_dma_channels.size(); n++)
+    inline void handle_inst(size_t n) override 
+    {
+        if(this->m_tasks[n])
         {
-            if(this->is_event(n))
-            {
-                this->acknowledge_isr(n);
-                if(this->m_tasks[0])
-                {
-                    printf(" >>> Hello from RTOS DMA Handler!\n");
-                    bool xHigherPriorityTaskWoken{};
-                    this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
-                    if(xHigherPriorityTaskWoken)
-                        FreeRTOS::Kernel::yield();
-                }
-            }
+            printf(" >>> Hello from RTOS DMA Handler!\n");
+            bool xHigherPriorityTaskWoken{};
+            this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
+            if(xHigherPriorityTaskWoken)
+                FreeRTOS::Kernel::yield();
         }
     }
+    // void handle_isr() override
+    // {   
+    //     for(size_t n = 0; n < this->m_dma_channels.size(); n++)
+    //     {
+    //         if(this->is_event(n))
+    //         {
+    //             this->acknowledge_isr(n);
+    //             if(this->m_tasks[n])
+    //             {
+    //                 printf(" >>> Hello from RTOS DMA Handler!\n");
+    //                 bool xHigherPriorityTaskWoken{};
+    //                 this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
+    //                 if(xHigherPriorityTaskWoken)
+    //                     FreeRTOS::Kernel::yield();
+    //             }
+    //         }
+    //     }
+    // }
  
 };
 }
