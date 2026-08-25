@@ -100,7 +100,7 @@ public:
     }
     inline void handle_inst(size_t n) override 
     {
-        printf(">>>> Hello From Interrupt \n");
+        // printf(">>>> Hello From Interrupt \n");
     }
     void handle_isr() override
     {   
@@ -147,25 +147,6 @@ public:
                 FreeRTOS::Kernel::yield();
         }
     }
-    // void handle_isr() override
-    // {   
-    //     for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-    //     {
-    //         if(this->is_event(n))
-    //         {
-    //             this->acknowledge_isr(n);
-    //             if(this->m_tasks[n])
-    //             {
-    //                 printf(" >>> Hello from RTOS DMA Handler!\n");
-    //                 bool xHigherPriorityTaskWoken{};
-    //                 this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
-    //                 if(xHigherPriorityTaskWoken)
-    //                     FreeRTOS::Kernel::yield();
-    //             }
-    //         }
-    //     }
-    // }
- 
 };
 }
 

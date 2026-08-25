@@ -23,7 +23,7 @@
 class Dma
 {
 protected:
-    uint m_dma{}; 
+    uint m_dma; 
     dma_channel_config m_config{};
     uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
     static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
@@ -35,14 +35,8 @@ public:
         set_transfer_size(DMA_SIZE_8);
     }
     explicit Dma()
+        : m_dma{static_cast<uint>(dma_claim_unused_channel(true))}, m_config{dma_channel_get_default_config(m_dma)}
     {
-        auto r = dma_claim_unused_channel(true);
-        // if(r > 0)
-        // WILL PANIC IF IT FAILS
-        m_dma = static_cast<uint>(r);
-
-        dma_channel_claim(m_dma);
-        m_config = dma_channel_get_default_config(m_dma);
         set_transfer_size(DMA_SIZE_8);
     }
     
@@ -179,7 +173,15 @@ public:
                              rx_buff.size(),            // m_spi count (each element is of size transfer_data_size)
                                 start);                    // don't start yet
     }
-    void start()
+    inline void set_write(volatile void* write_addr, bool start)
+    {
+        dma_channel_set_write_addr(m_dma, write_addr, start);   
+    }
+    void abort()
+    {
+        dma_channel_abort(m_dma);
+    }
+    inline void start()
     {
         dma_channel_start(m_dma);
     }
@@ -194,21 +196,21 @@ public:
     template<std::integral T>
     void infer_transfer_size(std::span<T> _buff)
     {
-        if constexpr (std::same_as<T, uint32_t>) 
+        if constexpr (sizeof(T) == 4) 
         {
             set_transfer_size(DMA_SIZE_32);
         }
-        else if constexpr (std::same_as<T, uint16_t>) 
+        else if constexpr (sizeof(T) == 2) 
         {
             set_transfer_size(DMA_SIZE_16);
         }
-        else if constexpr (std::same_as<T, uint8_t>) 
+        else if constexpr (sizeof(T) == 1) 
         {
             set_transfer_size(DMA_SIZE_8);
         }
         else  
         {
-            
+            panic("DMA Infer Sized Not implemented");
         }
     }
     void await_blocking()
