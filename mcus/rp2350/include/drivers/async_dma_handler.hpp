@@ -54,7 +54,7 @@ using embedded_hal::heapless::Vector;
  
 
 template<DmaIrq IRQ_n, size_t N_Channels>
-class DmaHandlerBase: public base::IDmaHandler
+class DmaHandlerBase: public irq::IDmaHandler
 {
 public:
     irq_handler_t m_handler{};
@@ -120,7 +120,7 @@ public:
 namespace rtos 
 {
 template<DmaIrq IRQ_n, size_t N>
-class AsyncDmaHandler : public DmaHandlerBase<IRQ_n, N> , public rtos::IAsyncDmaHandler
+class AsyncDmaHandler : public DmaHandlerBase<IRQ_n, N> , public irq::IAsyncDmaHandler
 {
     Vector<PicoTask*, N> m_tasks{};
 public:

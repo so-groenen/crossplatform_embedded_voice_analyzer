@@ -21,9 +21,7 @@
 #include "embedded_hal/traits.hpp"
 #include "hardware/spi.h"
 #include "hardware/dma.h"
-
 #include "drivers/pico_task.hpp"
-
 #include "drivers/dma.hpp"
 
 

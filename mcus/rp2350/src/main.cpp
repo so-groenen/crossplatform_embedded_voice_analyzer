@@ -101,10 +101,10 @@ public:
 
 
 static void __time_critical_func(i2s_handler)();
-I2SDmaIrqHandler<DmaIrq::IRQ_0, 1> irq{i2s_handler};
+I2SDmaIrqHandler<DmaIrq::IRQ_0, 1> irqs{i2s_handler};
 void __time_critical_func(i2s_handler)()
 {
-    irq.handle_isr();
+    irqs.handle_isr();
 }
 
 struct PioI2sConfig 
@@ -176,7 +176,7 @@ int main()
         pio_mic,
         PING,
         PONG,
-        irq};
+        irqs};
     
     i2s.start(); 
     
@@ -184,9 +184,9 @@ int main()
 
     while(true)
     {
-        i2s.read_blocking(buffer, irq.ready_flag());
+        i2s.read_blocking(buffer, irqs.ready_flag());
         printf("PING! \n");
-        i2s.read_blocking(buffer, irq.ready_flag());
+        i2s.read_blocking(buffer, irqs.ready_flag());
         printf("PONG! \n");
         
     }

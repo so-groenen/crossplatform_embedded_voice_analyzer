@@ -19,7 +19,7 @@ public:
     I2SHalfDuplex(P& pio_,
             std::span<T> ping, 
             std::span<T> pong,
-            base::IDmaHandler& irq)
+            irq::IDmaHandler& irq)
         : m_pio(pio_)
     {
         assert(ping.size() == pong.size());

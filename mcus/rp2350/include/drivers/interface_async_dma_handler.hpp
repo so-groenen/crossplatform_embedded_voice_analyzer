@@ -32,33 +32,28 @@
 
 #include "drivers/pico_task.hpp"
 #include "drivers/dma.hpp"
-
+#include "drivers/interface_irq_handler.hpp"
  
 // unblock threads from interrupts
 // should have pointer to thread
 // and to Dma to acknowledge interrupt;
 // also enable interrupt
 
- 
-namespace base
+
+
+namespace irq
 {
-    class IDmaHandler
+    class IDmaHandler : public IIrqHandler
     {
     public:
         virtual ~IDmaHandler() = default;
         virtual void bind_interrupt(Dma* dma) = 0;
-        virtual void handle_isr() = 0;
-        virtual void handle_inst(size_t n) = 0;
     };
-}
 
-namespace rtos 
-{
-    class IAsyncDmaHandler //: public base::IAsyncDmaHandler
+    class IAsyncDmaHandler
     {
     public:
         virtual ~IAsyncDmaHandler() = default;
-        // virtual void bind_interrupt() = 0;
         virtual void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) = 0;
     };
 }
