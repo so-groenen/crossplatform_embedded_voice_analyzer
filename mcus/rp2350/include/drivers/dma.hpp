@@ -32,6 +32,7 @@ public:
         : m_dma{channel}, m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
         dma_channel_claim(m_dma);
+        set_transfer_size<uint8_t>();
     }
     explicit Dma()
         : m_dma{static_cast<uint>(dma_claim_unused_channel(true))}, m_config{dma_channel_get_default_config(m_dma)}

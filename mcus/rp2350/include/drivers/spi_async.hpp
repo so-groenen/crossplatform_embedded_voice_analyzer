@@ -72,8 +72,8 @@ public:
 };
 
 
-namespace base
-{
+// namespace spi
+// {
     template<TransferMode M>
     class SpiDma : public Spi  
     {
@@ -166,7 +166,7 @@ namespace base
         }
     };
 
-}
+// }
 
  
 

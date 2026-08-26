@@ -3,6 +3,8 @@
 #include "FreeRTOS/Task.hpp"
 // #include "drivers/interface_async_input_handler.hpp"
 #include "drivers/async_input.hpp"
+#include "drivers/input.hpp"
+#include <cstddef>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <array>
@@ -27,7 +29,7 @@ public:
     {
         return *this;
     }
-    void bind_interrupt_from_rtos(AsyncInput* btn, PicoTask* task) override
+    void bind_interrupt_from_rtos(Input* btn, PicoTask* task) override
     {
         if(n_btns < N && btn && task)
         {
@@ -40,23 +42,25 @@ public:
             irq_set_enabled(IO_IRQ_BANK0, true);
         }       
     }
-    void handle_isr()
+    inline void handle_inst(size_t n) override
+    {
+        if(m_tasks[n] /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
+        {
+            bool higherPriorityTaskWoken = false;
+            m_tasks[n]->notifyGiveFromISR(higherPriorityTaskWoken);
+            if(higherPriorityTaskWoken)
+                FreeRTOS::Kernel::yield();
+        }
+    }
+    inline void handle_isr() override
     {
         for (size_t n = 0; n < n_btns; ++n)
         {
             if (gpio_get_irq_event_mask(m_pins[n]) & AsyncInput::all_irq) 
             {
                 gpio_acknowledge_irq(m_pins[n], AsyncInput::all_irq);
-                // gpio_set_irq_enabled(btn->pin(), AsyncInput::all_irq, false);
-                if(m_tasks[n] /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
-                {
-                    bool higherPriorityTaskWoken = false;
-                    m_tasks[n]->notifyGiveFromISR(higherPriorityTaskWoken);
-                    if(higherPriorityTaskWoken)
-                        FreeRTOS::Kernel::yield();
-                }
+                handle_inst(n);
             }
-            
         }
     }
 };

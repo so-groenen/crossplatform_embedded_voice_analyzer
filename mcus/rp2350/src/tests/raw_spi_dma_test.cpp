@@ -28,6 +28,7 @@
 #include "drivers/dma.hpp"
 #include "drivers/gpio.hpp"
 
+#include "drivers/spi_async.hpp"
 #include "pico/binary_info.h"
 #include "hardware/spi.h"
 #include "hardware/dma.h"
@@ -41,6 +42,7 @@
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
 #include "drivers/async_dma_handler.hpp"
+#include "types.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
 #define TEST_SIZE 1024
@@ -51,7 +53,9 @@ constexpr size_t N_CHANNELS = 1;
 
 // bind interrupt handler "irqs" to the my_handler Interrupt Service routine, and register a single DMA channel.
 // base: Do not record / block / unblock tasks 
-bind_interrupt_DMA_0(base, irqs, my_handler, N_CHANNELS);
+
+
+bind_base_interrupt_DMA_0(irqs, my_handler, N_CHANNELS);
 
 
 
@@ -59,7 +63,7 @@ bind_interrupt_DMA_0(base, irqs, my_handler, N_CHANNELS);
 class DmaEnabledIRQ : public Dma
 {
 public:
-    explicit DmaEnabledIRQ(uint channel, base::IAsyncDmaHandler& irq_handler)
+    explicit DmaEnabledIRQ(uint channel, irq::IDmaHandler& irq_handler)
         : Dma(channel)
     {
         irq_handler.bind_interrupt(this);
@@ -112,11 +116,10 @@ public:
         constexpr uint DMA_CH0{0};
         constexpr uint DMA_CH1{1};
 
-        using spi::base::SpiDma;
-        using spi::Mode;
-
-        SpiDma<Mode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
-        SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
+        using spi::SpiDma;
+ 
+        SpiDma<TransferMode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
+        SpiDma<TransferMode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
          
         if(!dma_channel_is_claimed(DMA_CH0))
             panic("channel 0 not claimed");
@@ -172,10 +175,10 @@ int main()
     stdio_init_all();
 
 
-    HelloDmaRtosTask writer{};
+    static HelloDmaRtosTask dma_task{};
 
     constexpr uint32_t stats_ms{20'000};
-    StatsTask stats{stats_ms};
+    static StatsTask stats{stats_ms};
 
     // constexpr uint32_t counter_ms{500};
     // CounterTask counter_task{counter_ms, "counter-tsk"};

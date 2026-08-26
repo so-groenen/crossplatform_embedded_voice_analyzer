@@ -59,7 +59,6 @@ class DmaHandlerBase: public irq::IDmaHandler
 public:
     irq_handler_t m_handler{};
     Vector<uint, N_Channels> m_dma_channels{};
-    // std::array<Dma*, 5> m_dma_insts
     bool is_event(size_t n) const
     {
         if constexpr (IRQ_n == DmaIrq::IRQ_0)
@@ -163,6 +162,16 @@ public:
     void handler_name() {                                                                   \
         irqs.handle_isr();                                                                  \
     }                                                                                       
+
+
+#define bind_base_interrupt_DMA_0(irqs, handler_name, n_channels)                             \
+    void handler_name();                                                                    \
+    [[maybe_unused]] static DmaHandlerBase<DmaIrq::IRQ_0, n_channels> irqs{handler_name}; \
+    void handler_name() {                                                                   \
+        irqs.handle_isr();                                                                  \
+    }                                                                                       
+
+                                                                                  
 
 
     

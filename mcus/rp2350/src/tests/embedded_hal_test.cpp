@@ -50,6 +50,9 @@ constexpr size_t N_CHANNELS = 2; // only one channel fire's interrupt!
 constexpr uint DMA_CH0      = 0;
 constexpr uint DMA_CH1      = 1;
 
+// SPI uses: 16, 17, 18, 19
+constexpr uint16_t BUTTON_PIN = 15;
+constexpr size_t num_buttons  = 1;
 
 // bind the interrupt handler "irqs" to the my_handler interrupt callback
 // use it to register N_channel = 1 interrupt from DMA channel
@@ -57,16 +60,8 @@ constexpr uint DMA_CH1      = 1;
 
 bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
 
-#include <concepts>
-
-
-template <class T, typename... Args>
-concept IsLogger = requires (T inst, std::format_string<Args...> fmt, Args&&... args)
-{
-    {inst.println(fmt, std::forward<Args>(args)...)} -> std::same_as<int>;
-    {inst.print(fmt, std::forward<Args>(args)...)} -> std::same_as<int>;
-};
-
+ 
+ 
  
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
     /* Handle stack overflow here */
@@ -80,78 +75,29 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
     }
 }
 
-
-namespace embedded {
-template<size_t N>
-class Logger 
-{
-    // FreeRTOS::Mutex mutex{};
-    std::array<char, N> buff{};
-public:
-    template <typename... Args>
-    int print(std::format_string<Args...> fmt, Args&&... args)
-    {
-        // mutex.lock();
-        auto result = std::format_to_n(buff.data(), N-1, fmt, std::forward<Args>(args)...);
-        *result.out = '\0';
-
-        int succes = printf("%s", buff.data());
-        // mutex.unlock();
-        return succes;
-    }
-    template <typename... Args>
-    int println(std::format_string<Args...> fmt, Args&&... args)
-    {
-        // mutex.lock();
-        auto result = std::format_to_n(buff.data(), N - 2, fmt, std::forward<Args>(args)...);
-
-        *result.out++ = '\n';
-        *result.out = '\0';
-        
-        int succes = printf("%s", buff.data());
-        // mutex.unlock();
-        return succes;
-    }
-};
-}
-static_assert(IsLogger<embedded::Logger<64>> && "is logger");
-
-static embedded::Logger<64> logger{};
-
-// template<IsLogger L>
-class LoggerTask : public PicoTask
-{
-    embedded::Logger<64>& m_logger;
-public:
-    LoggerTask(embedded::Logger<64>& logger)
-        : PicoTask(1, 512, "logger-task"), m_logger(logger)
-    {
-    }
-    void taskFunction() override
-    {
-        while (true)
-        {
-            m_logger.println("Hello world! {}", 42);
-            delay(pdMS_TO_TICKS(500));
-        }
-    }
-};
+ 
+ 
 
 
-using spi::rtos::SpiAsync;
-using spi::base::SpiDma;
-using spi::Mode;
-
-
+using embedded_hal::tests::input::ButtonAnyEdge;
+using embedded_hal::tests::input::ButtonRaiseBlinkApp;
+using embedded_hal::tests::input::ButtonFallBlinkApp;
+using embedded_hal::tests::output::BlinkyApp;
 using embedded_hal::tests::async::AsyncTransferApp;
+
+
 using spi::rtos::SpiAsyncFull;
+
+
+
+
 
 class TransferTask : public PicoTask
 {
 
 public:
     TransferTask()
-        : PicoTask(2, 512, "transfer-task")
+        : PicoTask(2, 1024, "transfer-task")
     {
         auto config = spi::Config::create_default();
         config.baudrate = 1000 * 1000;
@@ -175,7 +121,6 @@ public:
 
 
 
-using embedded_hal::tests::output::BlinkyApp;
  
 class BlinkyTask : public PicoTask
 {
@@ -196,12 +141,8 @@ public:
 
 
 
-constexpr uint16_t PIN_20    = 20;
-constexpr size_t num_buttons = 1;
 
 bind_interrupt_EXTI(exti_irq, exti_handler, num_buttons);
-
-using embedded_hal::tests::input::ButtonAnyEdge;
 
 class ButtonAnyTask : public PicoTask
 {
@@ -212,13 +153,11 @@ public:
     }
     void taskFunction() override
     {
-        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{BUTTON_PIN, Pull::Up, this, exti_irq};
         ButtonAnyEdge app{button};
         app.run();
     }
 };
-
-using embedded_hal::tests::input::ButtonRaiseBlinkApp;
 
 class ButtonRaiseBlinkTask : public PicoTask
 {
@@ -229,14 +168,13 @@ public:
     }
     void taskFunction() override
     {
-        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{BUTTON_PIN, Pull::Up, this, exti_irq};
         pico2_w::WifiOutput led{};
         ButtonRaiseBlinkApp app{button, led};
         app.run();
     }
 };
 
-using embedded_hal::tests::input::ButtonFallBlinkApp;
 
 class ButtonFallBlinkTask : public PicoTask
 {
@@ -247,7 +185,7 @@ public:
     }
     void taskFunction() override
     {
-        AsyncInput button{PIN_20, Pull::Up, this, exti_irq};
+        AsyncInput button{BUTTON_PIN, Pull::Up, this, exti_irq};
         pico2_w::WifiOutput led{};
         ButtonFallBlinkApp app{button, led};
         app.run();
@@ -264,13 +202,16 @@ int main()
 {
     stdio_init_all();
 
-    // constexpr uint32_t stats_ms{10'000};
-    // StatsTask stats{stats_ms};
+    constexpr uint32_t stats_ms{10'000};
+    StatsTask stats{stats_ms};
 
     TransferTask transfer_task{};
-    ButtonAnyTask blinky_task{};
-    // ButtonFallBlinkTask button_task{};
-    // // ButtonRaiseBlinkTask button_task{};
+
+    // uncomment ONE button task:
+
+    // ButtonAnyTask blinky_task{};
+    ButtonFallBlinkTask button_task{};
+    // ButtonRaiseBlinkTask button_task{};
 
  
     constexpr uint32_t counter_ms{500};
