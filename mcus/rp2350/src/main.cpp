@@ -6,12 +6,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/pio.h>
 #include <hardware/regs/intctrl.h>
 #include <hardware/spi.h>
 #include <hardware/sync.h>
+#include <hardware/uart.h>
 #include <limits>
 #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
@@ -149,7 +151,38 @@ void convert(std::span<float> out, std::span<uint32_t> in)
 }
  
 
-
+class Uart 
+{
+    uart_inst_t* m_uart{};
+public:
+    Uart(uart_inst_t* inst = uart0, u32 baudrate = 115200, u32 tx_pin = 0, u32 rx_pin = 1)
+        : m_uart(inst)
+    {
+        uart_init(m_uart, baudrate);
+        gpio_set_function(tx_pin, GPIO_FUNC_UART);
+        gpio_set_function(rx_pin, GPIO_FUNC_UART);
+        uart_set_format(m_uart, 8, 1, UART_PARITY_NONE);
+    }
+    void enable_fifo(bool v)
+    {
+        uart_set_fifo_enabled(m_uart, v);
+    }
+    // template<std::integral T>
+    // void write_blocking(std::span<const T> buff)
+    // {
+    //     uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
+    // }
+    // template<std::floating_point T>
+    void write_blocking(std::span<f32> buff)
+    {
+        uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
+    }
+    template<typename T>
+    void write_blocking(const T& buff)
+    {
+        uart_write_blocking(m_uart, reinterpret_cast<const u8*>(&buff), sizeof(T));
+    }
+};
 
 constexpr size_t FFT_SIZE   =  2048;
 constexpr size_t BUFF_SIZE  =  2*FFT_SIZE;    // LEFT + RIGHT Channel, we only keep one left in the end
@@ -157,6 +190,22 @@ constexpr size_t BUFF_SIZE  =  2*FFT_SIZE;    // LEFT + RIGHT Channel, we only k
 static std::array<u32, BUFF_SIZE> PING{};
 static std::array<u32, BUFF_SIZE> PONG{};
 static std::array<f32, FFT_SIZE>  SAMPLES{};
+
+constexpr size_t FLOAT_MAX_SAMPLE = 6;
+
+#pragma pack(push, 1)
+struct Packet_t {
+    uint8_t header[2];                               // Sync bytes: 0xAA, 0xBB
+    std::array<float, FLOAT_MAX_SAMPLE> samples;        // 4 floats (16 bytes)
+    void set_sample(std::array<float, FLOAT_MAX_SAMPLE>& buff)
+    {
+        samples.swap(buff);
+    }
+} ;
+#pragma pack(pop)
+
+ 
+
 
 
 int main() 
@@ -178,16 +227,32 @@ int main()
         PONG,
         irqs};
     
-    i2s.start(); 
+    // i2s.start(); 
     
-    std::span<u32> buffer{};
+    // std::span<u32> buffer{};
+    
+    Uart uart{};
+    std::array<f32, 4> arr = {42, 69, 67, 666};
 
-    while(true)
+    Packet_t tx_packet;
+    tx_packet.header[0] = 0xAA;
+    tx_packet.header[1] = 0xBB;
+
+    // Dummy loop variables
+    float counter = 0.0f;
+    std::array<float, FLOAT_MAX_SAMPLE> rx_buff{};
+    while (true) 
     {
-        i2s.read_blocking(buffer, irqs.ready_flag());
-        printf("PING! \n");
-        i2s.read_blocking(buffer, irqs.ready_flag());
-        printf("PONG! \n");
-        
+        // Populate payload
+        for(auto& value : rx_buff)
+        {
+            value = 1.0f - 2*(float)rand() / RAND_MAX;
+        }
+        tx_packet.set_sample(rx_buff);
+        uart.write_blocking(tx_packet);
+
+        sleep_ms(1000); // 10Hz transmission rate
     }
 }
+
+ 
