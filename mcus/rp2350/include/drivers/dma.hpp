@@ -69,13 +69,14 @@ public:
     {
         channel_config_set_dreq(&m_config, dreq);
     }
-    void config_transfer(volatile void* write_addr, const volatile void* read_addr, size_t transfer_count)
+    void config_transfer(volatile void* write_addr, const volatile void* read_addr, size_t transfer_count, bool start = false)
     {
-        dma_channel_configure(m_dma, &m_config,
+        dma_channel_configure(m_dma, 
+                                &m_config,
                                 write_addr,           // write address
                                 read_addr,  // read address from memory
                                 transfer_count,  // element count (each element is of size transfer_data_size)
-                                false);     
+                                start);     
     }
     template<std::integral T>
     void config_transfer(std::span<T> write_buff, const std::span<T> read_buff)
@@ -121,12 +122,14 @@ public:
         // read from memory and send/WRITE to peripheral
         read_from_memory(true); 
         write_to_memory(false);
-        dma_channel_configure(m_dma, &m_config,
+        dma_channel_configure(m_dma, 
+                                &m_config,
                                 write_addr,           // write address
                                 buff_to_send.data(),  // read address from memory
                                 buff_to_send.size(),  // element count (each element is of size transfer_data_size)
                                 start);     
     }
+ 
     // read from read_addr (for ex Spi-data register) and write into rx_buffer
     void read(std::span<uint8_t> rx_buff, const volatile void * read_addr, uint dreq, bool start)
     {
@@ -134,20 +137,28 @@ public:
         // read from peripheral register and write to memory
         read_from_memory(false); 
         write_to_memory(true);
-        dma_channel_configure(m_dma, &m_config,
+        dma_channel_configure(m_dma, 
+                            &m_config,
                             rx_buff.data(),            // write address in memory
                             read_addr,                 // read from periph address
-                             rx_buff.size(),            
+                            rx_buff.size(),            
                             start);                     
     }
-    inline void set_write_addr(volatile void* write_addr, bool start)
+    inline void set_write_addr(volatile void* write_addr, bool start = false)
     {
         dma_channel_set_write_addr(m_dma, write_addr, start);   
     }
-  
-    inline void set_read_addr(const void* read_addr, bool start)
+    void set_transfer_count(size_t len)
     {
-    dma_channel_set_read_addr(m_dma, read_addr, start);   
+        dma_channel_set_transfer_count(m_dma, len, false);
+    }
+    void transfer_now(const volatile void *read_addr, size_t len)
+    {
+        dma_channel_transfer_from_buffer_now(m_dma, read_addr, len);
+    }
+    inline void set_read_addr(const void* read_addr, bool start = false)
+    {
+        dma_channel_set_read_addr(m_dma, read_addr, start);   
     }
 
     void abort()
@@ -182,7 +193,18 @@ public:
             panic("DMA Infer Sized Not implemented");
         }
     }
- 
+     template<std::floating_point T>
+    void set_transfer_size()
+    {
+        if constexpr (sizeof(T) == 4) 
+        {
+            channel_config_set_transfer_data_size(&m_config, DMA_SIZE_32);
+        }
+        else  
+        {
+            panic("DMA Infer Sized Not implemented");
+        }
+    }
     void await_blocking()
     {
         dma_channel_wait_for_finish_blocking(m_dma);
