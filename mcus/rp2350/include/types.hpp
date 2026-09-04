@@ -17,3 +17,10 @@ enum class TransferMode
     Tx,
     Rx,
 };
+
+enum class IOMode
+{
+    Blocking,
+    NonBlocking,
+    Rtos,
+};

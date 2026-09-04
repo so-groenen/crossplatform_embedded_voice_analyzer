@@ -56,88 +56,23 @@ struct Config
 
 
 
-
-class Spi
-{
-protected:
-    spi_inst_t* m_spi{};
-public:
-    explicit Spi(spi_inst_t* spi, uint32_t baudrate = 1000 * 1000);
-    explicit Spi(spi_inst_t* spi, const spi::Config& config);
-    
-    // Spi(const Spi& other)
-    //     : m_spi{other.m_spi}
-    // {}
-    static Spi create(spi_inst_t* spi, uint32_t pin_sck, uint32_t pin_mosi, uint32_t pin_miso, const spi::Config& config)
-    {
-        gpio_set_function(pin_sck,  GPIO_FUNC_SPI);
-        gpio_set_function(pin_miso, GPIO_FUNC_SPI);
-        gpio_set_function(pin_mosi, GPIO_FUNC_SPI);
-        return Spi{spi, config};
-    }
-    static Spi create(spi_inst_t* spi, uint32_t pin_sck, uint32_t pin_mosi, uint32_t pin_miso)
-    {
-        auto config = Config::create_default();
-        gpio_set_function(pin_sck,  GPIO_FUNC_SPI);
-        gpio_set_function(pin_miso, GPIO_FUNC_SPI);
-        gpio_set_function(pin_mosi, GPIO_FUNC_SPI);
-        return Spi{spi, config};
-    }
-    static Spi create_tx_only(spi_inst_t* spi, uint32_t pin_sck, uint32_t pin_mosi, const spi::Config& config)
-    {
-        gpio_set_function(pin_sck,  GPIO_FUNC_SPI);
-        gpio_set_function(pin_mosi, GPIO_FUNC_SPI);
-        return Spi{spi, config};
-    }
-    static Spi create_rx_only(spi_inst_t* spi, uint32_t pin_sck, uint32_t pin_miso, const spi::Config& config)
-    {
-        gpio_set_function(pin_sck,  GPIO_FUNC_SPI);
-        gpio_set_function(pin_miso, GPIO_FUNC_SPI);
-        return Spi{spi, config};
-    }
-
-
-    void set_config(const spi::Config& config);
-    static void set_config(spi_inst_t* s, const spi::Config& config);
-    static void init_from_config(spi_inst_t* s, const spi::Config& config);
-    uint32_t baudrate() const ;
-    void enable_loop_back(bool v)
-    {
-        v? hw_set_bits(&spi_get_hw(m_spi)->cr1, SPI_SSPCR1_LBM_BITS)
-        : hw_clear_bits(&spi_get_hw(m_spi)->cr1, SPI_SSPCR1_LBM_BITS);
-    }
-    // blocking IO
-    auto write_blocking(const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError>;
-    auto read_blocking(std::span<uint8_t> rx_buff) -> std::expected<void, SpiError>;
-    auto transfer_blocking(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError>;
-
-
-    // state
-    bool is_readable() const;
-    bool is_busy() const;
-    bool is_writable() const;
-
-    ~Spi();
-
-};
-
 enum class SpiMode 
 {
     Tx, Rx, RxTx,
 };
 
 template<SpiMode M>
-class SpiImpl
+class SpiBlocking
 {
 protected:
     spi_inst_t* m_spi{};
 public:
-    explicit SpiImpl(spi_inst_t* spi, u32 baudrate = 1000 * 1000)
+    explicit SpiBlocking(spi_inst_t* spi, u32 baudrate = 1000 * 1000)
         : m_spi{spi}
     {
         spi_init(m_spi, baudrate);
     }
-    explicit SpiImpl(spi_inst_t* spi, const spi::Config& config)
+    explicit SpiBlocking(spi_inst_t* spi, const spi::Config& config)
         : m_spi{spi}
     {
         spi_init(m_spi, config.baudrate);
@@ -214,7 +149,7 @@ public:
         }
         return{};
     }
-    ~SpiImpl()
+    ~SpiBlocking()
     {
         // if(m_spi)
         //     spi_deinit(m_spi);
@@ -223,11 +158,12 @@ public:
  
 
 template<SpiMode M>
-class SpiDmaImpl : public SpiImpl<M>
+class SpiDma : public SpiBlocking<M>
 {
+protected:
     std::optional<Dma> m_dma_tx{std::nullopt};
     std::optional<Dma> m_dma_rx{std::nullopt};
-
+private:
     void init_dma_tx()
     {
         if(!m_dma_tx)
@@ -250,20 +186,20 @@ class SpiDmaImpl : public SpiImpl<M>
     }
 public:
 
-    explicit SpiDmaImpl(spi_inst_t* spi, Dma dma_tx, const spi::Config& config) requires (M == SpiMode::Tx)
-        : SpiImpl<M>{spi, config}, m_dma_tx{std::move(dma_tx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, const spi::Config& config) requires (M == SpiMode::Tx)
+        : SpiBlocking<M>{spi, config}, m_dma_tx{std::move(dma_tx)}
     {
         init_dma_tx();
     }
 
-    explicit SpiDmaImpl(spi_inst_t* spi, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::Rx)
-        : SpiImpl<M>{spi, config}, m_dma_rx{std::move(dma_rx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::Rx)
+        : SpiBlocking<M>{spi, config}, m_dma_rx{std::move(dma_rx)}
     {
         init_dma_rx();
     }
 
-    explicit SpiDmaImpl(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::RxTx)
-        : SpiImpl<M>{spi, config}, m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::RxTx)
+        : SpiBlocking<M>{spi, config}, m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
     {
         init_dma_rx();
         init_dma_tx();
@@ -298,7 +234,7 @@ public:
                   false);
         read_dma(rx_buff,
                  false);
-                 
+
         if(!start)
             return;
 
@@ -308,53 +244,69 @@ public:
 
 
 
-class SpiFactory 
+ 
+
+template<IOMode Io>
+class Spi;
+ 
+
+template<>
+class Spi<IOMode::Blocking> 
 {
 public:
-    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, u32 miso_pin, const Config& config) -> SpiImpl<SpiMode::RxTx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, u32 miso_pin, const Config& config) -> SpiBlocking<SpiMode::RxTx> 
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiImpl<SpiMode::RxTx>{inst, config};
+        return SpiBlocking<SpiMode::RxTx>{inst, config};
     }   
-    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, const Config& config) -> SpiDmaImpl<SpiMode::RxTx> 
-    {
-        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
-        gpio_set_function(miso_pin, GPIO_FUNC_SPI);
-        gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiDmaImpl<SpiMode::RxTx>{inst, std::move(dma_tx), std::move(dma_rx), config};
-    }   
-
-    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiImpl<SpiMode::Tx> 
+    
+    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<SpiMode::Tx> 
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiImpl<SpiMode::Tx>{inst, config};
+        return SpiBlocking<SpiMode::Tx>{inst, config};
     }   
-    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, const Config& config) -> SpiDmaImpl<SpiMode::Tx> 
+ 
+    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<SpiMode::Tx> 
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiDmaImpl<SpiMode::Tx>{inst, std::move(dma_tx), config};
+        return SpiBlocking<SpiMode::Tx>{inst, config};
     }   
-
-    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiImpl<SpiMode::Tx> 
-    {
-        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
-        gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiImpl<SpiMode::Tx>{inst, config};
-    }   
-    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, const Config& config) -> SpiDmaImpl<SpiMode::Rx> 
-    {
-        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
-        gpio_set_function(miso_pin, GPIO_FUNC_SPI);
-        return SpiDmaImpl<SpiMode::Rx>{inst, std::move(dma_rx), config};
-    }   
+   
 };
 
+
+template<>
+class Spi<IOMode::NonBlocking> 
+{
+public:
+    
+    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, const Config& config) -> SpiDma<SpiMode::RxTx> 
+    {
+        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
+        gpio_set_function(miso_pin, GPIO_FUNC_SPI);
+        gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
+        return SpiDma<SpiMode::RxTx>{inst, std::move(dma_tx), std::move(dma_rx), config};
+    }   
  
-static_assert(IsBlockingReadWrite<Spi>, "Spi must implement read & write blocking");
+    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, const Config& config) -> SpiDma<SpiMode::Tx> 
+    {
+        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
+        gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
+        return SpiDma<SpiMode::Tx>{inst, std::move(dma_tx), config};
+    }   
+
+ 
+    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, const Config& config) -> SpiDma<SpiMode::Rx> 
+    {
+        gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
+        gpio_set_function(miso_pin, GPIO_FUNC_SPI);
+        return SpiDma<SpiMode::Rx>{inst, std::move(dma_rx), config};
+    }   
+};
  
 
 } // hardware

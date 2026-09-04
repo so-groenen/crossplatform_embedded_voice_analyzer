@@ -69,6 +69,7 @@ function(configure_picor_rtos_target TARGET_NAME)
     pico_enable_stdio_usb(${TARGET_NAME} 0)
     pico_enable_stdio_uart(${TARGET_NAME} 1)
     pico_add_extra_outputs(${TARGET_NAME})
+    target_compile_definitions(${TARGET_NAME} PRIVATE DEBUG)
 endfunction()
 
 
@@ -79,7 +80,8 @@ endfunction()
 set(DRIVER_SRC 
     src/drivers/input.cpp
     src/drivers/async_input.cpp
-    src/drivers/spi.cpp)
+    # src/drivers/spi.cpp
+    )
 
 
 

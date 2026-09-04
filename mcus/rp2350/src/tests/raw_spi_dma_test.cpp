@@ -28,7 +28,7 @@
 #include "drivers/dma.hpp"
 #include "drivers/gpio.hpp"
 
-#include "drivers/spi_async.hpp"
+// #include "drivers/spi_async.hpp"
 #include "pico/binary_info.h"
 #include "hardware/spi.h"
 #include "hardware/dma.h"
@@ -75,18 +75,7 @@ void my_handler()
     irqs.handle_isr();
 }
 
-// Everytime a Dma transfer, enabled by the irq_handler, fires, an interrupt is triggered
-// class DmaEnabledIRQ : public Dma
-// {
-// public:
-//     explicit DmaEnabledIRQ(uint channel, irq::IDmaHandler& irq_handler)
-//         : Dma(channel)
-//     {
-//         irq_handler.bind_interrupt(this);
-//     }
-// };
-
-// using hardware::spi::Spi;
+ 
 using namespace hardware::spi;
 
 constexpr uint DMA_CH0{0};
@@ -95,11 +84,11 @@ constexpr size_t TEST_SIZE{1024};
 
 class HelloDmaRtosTask : public PicoTask
 {   
-    SpiDmaImpl<SpiMode::RxTx> m_spi;
+    SpiDma<SpiMode::RxTx> m_spi;
 public:
-    HelloDmaRtosTask(const spi::Config& config)
+    HelloDmaRtosTask(const Config& config)
         : PicoTask(1, 512, "DMA-test-task"), 
-        m_spi(SpiFactory::make(spi_default, 
+        m_spi(Spi<IOMode::NonBlocking>::make(spi_default, 
                                PICO_DEFAULT_SPI_SCK_PIN,
                                PICO_DEFAULT_SPI_TX_PIN, 
                                PICO_DEFAULT_SPI_RX_PIN,  
@@ -209,7 +198,7 @@ int main()
 {
     stdio_init_all();
 
-    auto config = spi::Config::create_default();
+    auto config = Config::create_default();
     config.baudrate = 1000 * 1000;
 
     static HelloDmaRtosTask dma_task{config};
