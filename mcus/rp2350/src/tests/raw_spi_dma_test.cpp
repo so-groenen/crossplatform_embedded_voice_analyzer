@@ -70,22 +70,25 @@ public:
     }
 };
 
+using hardware::spi::Spi;
 
 class HelloDmaRtosTask : public PicoTask
-{
-    // SpiRTOS m_reader;
+{   
+    
 public:
     HelloDmaRtosTask()
         : PicoTask(1, 512, "DMA-test-task")
     {
-        spi_init(spi_default, 1000 * 1000);
-        gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
-        gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
-        gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
-        gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
 
-        // Loopback: DMA channel 1 will transfer to SPI-FIFO, DMA channel 0 will write it back to memory (recieve SPI data in buffer)
-        hw_set_bits(&spi_get_hw(spi_default)->cr1, SPI_SSPCR1_LBM_BITS);
+        spi_init(spi_default, 1000 * 1000);
+ 
+        auto config = spi::Config::create_default();
+        auto _spi   = Spi::create(spi_default, 
+                                  PICO_DEFAULT_SPI_SCK_PIN,
+                                  PICO_DEFAULT_SPI_TX_PIN,
+                                  PICO_DEFAULT_SPI_RX_PIN, 
+                                  config);
+        _spi.enable_loop_back(true);
     }
     static void check_buffs(std::span<uint8_t> rbuff, std::span<uint8_t> tbuff)
     {

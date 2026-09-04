@@ -1,6 +1,7 @@
 #ifndef UART_PICO_HPP
 #define UART_PICO_HPP
 
+#include "drivers/dma.hpp"
 #include "drivers/interface_irq_handler.hpp"
 #include "embedded_hal/heapless.hpp"
 #include "types.hpp"
@@ -117,6 +118,31 @@ public:
     u32 get_dreq_num(bool is_tx)
     {
         return uart_get_dreq_num(m_uart, is_tx);
+    }
+    void init_dma(Dma& dma, bool is_tx)
+    {
+        if(is_tx)
+        {
+            dma.read_from_memory(true);
+            dma.write_to_memory(false);
+            dma.set_transfer_size<u8>();
+            dma.set_data_request(get_dreq_num(is_tx));
+        }
+        else  
+        {
+            dma.read_from_memory(false);
+            dma.write_to_memory(true);
+            dma.set_transfer_size<u8>();
+            dma.set_data_request(get_dreq_num(is_tx));
+        }
+    }
+    inline void send_dma(Dma& dma, const volatile void* read_addr, size_t transfer_count)
+    {
+        dma.config_transfer(data_register(), read_addr, transfer_count, true);
+    }
+    inline void read_dma(Dma& dma, volatile void* write_addr, size_t transfer_count)
+    {
+        dma.config_transfer(write_addr, data_register(), transfer_count, true);
     }
     ~Uart()
     {

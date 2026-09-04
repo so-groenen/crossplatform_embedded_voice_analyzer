@@ -34,7 +34,9 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
+#include "drivers/spi_async.hpp"
 #include "drivers/async_dma_handler.hpp"
+#include "types.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
 
@@ -53,10 +55,7 @@ constexpr uint DMA_CH1      = 1;
 bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
 
 
-using spi::rtos::SpiAsync;
-using spi::base::SpiDma;
-using spi::Mode;
-
+ 
 
 class HelloDmaRtosTask : public PicoTask
 {
@@ -103,8 +102,20 @@ public:
         static uint8_t txbuf[TEST_SIZE];
         static uint8_t rxbuf[TEST_SIZE];
 
-        SpiAsync<Mode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
-        SpiDma<Mode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
+
+
+        spi_init(spi_default, 1000 * 1000);
+ 
+        auto config = hardware::spi::Config::create_default();
+        auto spi_hw = hardware::spi::Spi::create(spi_default, 
+                                  PICO_DEFAULT_SPI_SCK_PIN,
+                                  PICO_DEFAULT_SPI_TX_PIN,
+                                  PICO_DEFAULT_SPI_RX_PIN, 
+                                  config);
+        spi_hw.enable_loop_back(true);
+
+        spi::async::SpiAsync<TransferMode::Rx> spi_rx{spi_default, Dma{DMA_CH0}, this, irqs};
+        spi::SpiDma<TransferMode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
         
     
         if(!dma_channel_is_claimed(DMA_CH0))

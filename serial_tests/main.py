@@ -5,14 +5,14 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 # --- CONFIGURATION ---
-SERIAL_PORT = '/dev/ttyACM1'  # Update to your Picoprobe UART COM port
-BAUD_RATE = 115200
-FLOATS_COUNT = 6
+SERIAL_PORT  = '/dev/ttyACM1'  # Update to your Picoprobe UART COM port
+BAUD_RATE    = 921_600
+FLOATS_COUNT = 64
 
 PAYLOAD_SIZE = FLOATS_COUNT * 4  # 16 bytes
 
 # Total audio window length to display (must be a power of 2 for clean FFT visualization)
-BUFFER_SIZE = 6 ##512 
+BUFFER_SIZE = FLOATS_COUNT ##512 
 # Estimated sample rate of your Pico loop (adjust to match your Pico's physical loop speed)
 SAMPLE_RATE = 8000  
 
@@ -46,9 +46,10 @@ def parse_serial_data():
             continue
 
 
-        # print("HELLO")
+        print("Received")
         payload = ser.read(PAYLOAD_SIZE)
         if len(payload) != PAYLOAD_SIZE:
+            print("bad payload")
             continue
 
         # checksum_byte = ser.read(1)
@@ -58,9 +59,11 @@ def parse_serial_data():
         # Unpack the 4 audio floats
         floats = struct.unpack(f'<{FLOATS_COUNT}f', payload)
         new_samples.extend(floats)
+        # break
 
     if new_samples:
         # Shift the old data out and append the new incoming audio blocks
+        # audio_buffer[:] = new_samples
         audio_buffer = np.roll(audio_buffer, -len(new_samples))
         audio_buffer[-len(new_samples):] = new_samples
 
@@ -112,7 +115,7 @@ def main():
     print(f"Streaming audio visualizations from {SERIAL_PORT}. Close window to stop.")
     
     # Run the visualization framework loop
-    ani = animation.FuncAnimation(fig, update_plot, interval=1000, blit=True, cache_frame_data=False)
+    ani = animation.FuncAnimation(fig, update_plot, interval=500, blit=True, cache_frame_data=False)
     plt.show()
     
     ser.close()

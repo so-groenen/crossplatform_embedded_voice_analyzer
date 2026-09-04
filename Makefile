@@ -23,7 +23,6 @@ ADAPTER_SPEED  := 5000
 OPENOCD_FLAGS  := -s $(SCRIPTS) -f $(INTERFACE) -f $(TARGET_CFG)  -c "adapter speed $(ADAPTER_SPEED)"
 
 
-
 .PHONY: all flash clean reset build 
 all: build flash 
  
