@@ -10,18 +10,30 @@
 #include <hardware/regs/intctrl.h>
 #include <hardware/structs/io_bank0.h>
 #include <hardware/uart.h>
+#include <optional>
 #include <span>
 
 
 namespace hardware 
 {
+ 
 
 
-class Uart 
+
+
+enum class UartMode : u8
+{
+    Rx, Tx, RxTx,
+};
+
+
+template<UartMode M>
+class UartImplBase
 {
     uart_inst_t* m_uart{};
+ 
 public:
-    Uart(uart_inst_t* inst = uart0, u32 baudrate = 115200, u32 tx_pin = 0, u32 rx_pin = 1)
+    UartImplBase(uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 rx_pin = 1, u32 baudrate = 115200) requires (M == UartMode::RxTx)
         : m_uart(inst)
     {
         uart_init(m_uart, baudrate);
@@ -29,6 +41,21 @@ public:
         gpio_set_function(rx_pin, GPIO_FUNC_UART);
         uart_set_format(m_uart, 8, 1, UART_PARITY_NONE);
     }
+    UartImplBase(uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 baudrate = 115200) requires (M == UartMode::Tx)
+        : m_uart(inst)
+    {
+        uart_init(m_uart, baudrate);
+        gpio_set_function(tx_pin, GPIO_FUNC_UART);
+        uart_set_format(m_uart, 8, 1, UART_PARITY_NONE);
+    }
+    UartImplBase(uart_inst_t* inst = uart0, u32 rx_pin = 1, u32 baudrate = 115200) requires (M == UartMode::Rx)
+        : m_uart(inst)
+    {
+        uart_init(m_uart, baudrate);
+        gpio_set_function(rx_pin, GPIO_FUNC_UART);
+        uart_set_format(m_uart, 8, 1, UART_PARITY_NONE);
+    }
+
     void set_baudrate(u32 baudrate)
     {
         uart_set_baudrate(m_uart, baudrate);
@@ -50,60 +77,60 @@ public:
         uart_set_fifo_enabled(m_uart, v);
     }
     // template<std::integral T>
-    void write_blocking(const uint8_t * src, size_t len)
+    void write_blocking(const uint8_t * src, size_t len) requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         uart_write_blocking(m_uart, src, len);
     }
-    void write_blocking(std::span<u8> buff)
+    void write_blocking(std::span<u8> buff) requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
     }
-    void write_blocking(std::span<u16> buff)
+    void write_blocking(std::span<u16> buff)requires (M == UartMode::Tx || M == UartMode::RxTx) 
     {
         uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
     }
-    void write_blocking(std::span<u32> buff)
+    void write_blocking(std::span<u32> buff) requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
     }
-    void write_blocking(std::span<f32> buff)
+    void write_blocking(std::span<f32> buff) requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         uart_write_blocking(m_uart, reinterpret_cast<u8*>(buff.data()), buff.size_bytes());
     }
     template<typename T>
-    void write_blocking(const T* buff)
+    void write_blocking(const T* buff) requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         uart_write_blocking(m_uart, reinterpret_cast<const u8*>(buff), sizeof(T));
     }
 
 
-    void read_blocking(uint8_t * dest, size_t len)
+    void read_blocking(uint8_t * dest, size_t len) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, dest, len);
     }
-    void read_blocking(std::span<u8> rx_buff)
+    void read_blocking(std::span<u8> rx_buff) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, rx_buff.data(), rx_buff.size_bytes());
     }
-    void read_blocking(std::span<u16> rx_buff)
+    void read_blocking(std::span<u16> rx_buff) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, reinterpret_cast<u8*>(rx_buff.data()), rx_buff.size_bytes());
     }
-    void read_blocking(std::span<u32> rx_buff)
+    void read_blocking(std::span<u32> rx_buff) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, reinterpret_cast<u8*>(rx_buff.data()), rx_buff.size_bytes());
     }
-    void read_blocking(std::span<f32> rx_buff)
+    void read_blocking(std::span<f32> rx_buff) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, reinterpret_cast<u8*>(rx_buff.data()), rx_buff.size_bytes());
     }
     template<typename T>
-    void read_blocking(const T* buff)
+    void read_blocking(const T* buff) requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         uart_read_blocking(m_uart, reinterpret_cast<u8*>(buff), sizeof(T));
     }
 
-    bool is_readeable() const 
+    bool is_readeable() const  requires (M == UartMode::Rx || M == UartMode::RxTx)
     {
         return uart_is_readable(m_uart);
     }
@@ -111,7 +138,7 @@ public:
     {
         uart_set_irq_enables(m_uart, rx_has_data, tx_needs_data);
     }
-    bool is_writable() const 
+    bool is_writable() const  requires (M == UartMode::Tx || M == UartMode::RxTx)
     {
         return uart_is_writable(m_uart);
     }
@@ -119,70 +146,108 @@ public:
     {
         return uart_get_dreq_num(m_uart, is_tx);
     }
-    void init_dma(Dma& dma, bool is_tx)
-    {
-        if(is_tx)
-        {
-            dma.read_from_memory(true);
-            dma.write_to_memory(false);
-            dma.set_transfer_size<u8>();
-            dma.set_data_request(get_dreq_num(is_tx));
-        }
-        else  
-        {
-            dma.read_from_memory(false);
-            dma.write_to_memory(true);
-            dma.set_transfer_size<u8>();
-            dma.set_data_request(get_dreq_num(is_tx));
-        }
-    }
-    inline void send_dma(Dma& dma, const volatile void* read_addr, size_t transfer_count)
-    {
-        dma.config_transfer(data_register(), read_addr, transfer_count, true);
-    }
-    inline void read_dma(Dma& dma, volatile void* write_addr, size_t transfer_count)
-    {
-        dma.config_transfer(write_addr, data_register(), transfer_count, true);
-    }
-    ~Uart()
+    
+    
+    ~UartImplBase()
     {
         uart_deinit(m_uart);
     }
 };
 
-template<typename T, size_t N>
-class UartIrqWriter  
+
+template<UartMode M>
+class UartImplDma : public UartImplBase<M>
 {
-    irq_handler_t m_handler{};
-    embedded_hal::heapless::RingBuffer<T, N> m_ring_buffer{};
-    Uart* m_uart{};
-public:
-    UartIrqWriter(irq_handler_t handler)
-        : m_handler(handler)
+    std::optional<Dma> m_dma_tx{std::nullopt};
+    std::optional<Dma> m_dma_rx{std::nullopt};
+    void set_rx()
     {
-    }
-    void handle_isr()
-    {
-        while (m_uart->is_writable() && !m_ring_buffer.empty()) 
+        if(m_dma_rx)
         {
-            T data = m_ring_buffer.pop();
-            m_uart->write_blocking(&data);
+            m_dma_tx->read_from_memory(false);
+            m_dma_tx->write_to_memory(true);
+            m_dma_tx->set_transfer_size<u8>();
+            m_dma_tx->set_data_request(this->get_dreq_num(false));
         }
     }
-    inline void write(char c)
+    void set_tx()
     {
-        m_ring_buffer.push(c);
+        if(m_dma_tx)
+        {
+            m_dma_tx->read_from_memory(true);
+            m_dma_tx->write_to_memory(false);
+            m_dma_tx->set_transfer_size<u8>();
+            m_dma_tx->set_data_request(this->get_dreq_num(true));
+        }
     }
-    void bind_interrupt(Uart* uart)
+public:
+    UartImplDma(Dma dma_tx, uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 bauderate = 115200) requires (M == UartMode::Tx)
+        : m_dma_tx(std::move(dma_tx)), UartImplBase<UartMode::Tx>(inst, tx_pin, bauderate)
     {
-        m_uart = uart;
-        enum irq_num_rp2350 irq = (m_uart->get_instance() == uart0)? UART0_IRQ : UART1_IRQ;
-        irq_set_exclusive_handler(irq, m_handler);
-        irq_set_enabled(irq, true);
-        // m_ready_flags.push_back(false);
+        set_tx();
+    }
+    UartImplDma(Dma dma_rx, uart_inst_t* inst = uart0, u32 rx_pin = 1,  u32 bauderate = 115200) requires (M == UartMode::Rx)
+        : m_dma_rx(std::move(dma_rx)), UartImplBase<UartMode::Rx>(inst, rx_pin, bauderate)
+    {
+        set_rx();
+    }
+    UartImplDma(Dma dma_tx, Dma dma_rx, uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 rx_pin = 1, u32 baudrate = 115200) requires (M == UartMode::RxTx)
+        : m_dma_tx(std::move(dma_tx)), m_dma_rx(std::move(dma_rx)), UartImplBase<UartMode::RxTx>(inst, tx_pin, rx_pin, baudrate)
+    {
+        set_tx();
+        set_rx();
+    }
+    Dma& dma_tx() requires (M == UartMode::RxTx || M == UartMode::Tx)
+    {
+        return m_dma_tx.value();
+    }
+    Dma& dma_rx() requires (M == UartMode::RxTx || M == UartMode::Rx)
+    {
+        return m_dma_rx.value();
+    }
+    inline void send_dma(const volatile void* read_addr, size_t transfer_count) requires (M == UartMode::RxTx || M == UartMode::Tx)
+    {
+        m_dma_tx->config_transfer(this->data_register(), read_addr, transfer_count, true);
+    }
+    inline void read_dma(volatile void* write_addr, size_t transfer_count) requires (M == UartMode::RxTx || M == UartMode::Rx)
+    {
+        m_dma_rx->config_transfer(write_addr, this->data_register(), transfer_count, true);
     }
 };
 
+
+class Uart 
+{
+public:
+    static auto make(uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 rx_pin = 1, u32 bauderate = 115200) -> UartImplBase<UartMode::RxTx> 
+    {
+        return {inst, tx_pin, rx_pin, bauderate};
+    }   
+    static auto make(Dma dma_tx, Dma dma_rx, uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 rx_pin = 1, u32 bauderate = 115200) -> UartImplDma<UartMode::RxTx> 
+    {
+        return {std::move(dma_tx), std::move(dma_rx), inst, tx_pin, rx_pin, bauderate};
+    }  
+
+    static auto make_tx_only(uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 bauderate = 115200) -> UartImplBase<UartMode::Tx> 
+    {
+        return {inst, tx_pin, bauderate};
+    }   
+    static auto make_tx_only(Dma dma_tx, uart_inst_t* inst = uart0, u32 tx_pin = 0, u32 bauderate = 115200) -> UartImplDma<UartMode::Tx> 
+    {
+        return {std::move(dma_tx), inst, tx_pin, bauderate};
+    }   
+
+    static auto make_rx_only(uart_inst_t* inst = uart0, u32 rx_pin = 1, u32 bauderate = 115200) -> UartImplBase<UartMode::Rx> 
+    {
+        return {inst, rx_pin, bauderate};
+    }   
+    static auto make_rx_only(Dma dma_tx, uart_inst_t* inst = uart0, u32 rx_pin = 1, u32 bauderate = 115200) -> UartImplDma<UartMode::Rx> 
+    {
+        return {std::move(dma_tx), inst, rx_pin, bauderate};
+    }   
+};
+
+ 
 
 }
 

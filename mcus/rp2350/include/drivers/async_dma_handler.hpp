@@ -89,13 +89,22 @@ public:
     void bind_interrupt(Dma* dma) override
     {
         m_dma_channels.push_back(dma->channel());
-        if constexpr (IRQ_n == DmaIrq::IRQ_1)
-            dma->set_irqn(1); // By default we use IRQ_0!
-        dma->enable_channel(true);
-
+        // if constexpr (IRQ_n == DmaIrq::IRQ_1)
+        // {
+        //     dma->enable_channel(true, 1);
+        // }
+        // else  
+        // {
+        //     dma->enable_channel(true, 0);
+        // }
         // Register our callback function to the CPU vector table for DMA_IRQ_0 etc...
-        irq_set_exclusive_handler(static_cast<irq_num_t>(IRQ_n), m_handler);
-        irq_set_enabled(static_cast<irq_num_t>(IRQ_n), true);
+        static bool bound = false;
+        if(m_handler && !bound)
+        {
+            irq_set_exclusive_handler(static_cast<irq_num_t>(IRQ_n), m_handler);
+            irq_set_enabled(static_cast<irq_num_t>(IRQ_n), true);
+            bound = true;
+        }
     }
     inline void handle_inst(size_t n) override 
     {
@@ -139,7 +148,9 @@ public:
     {
         if(this->m_tasks[n])
         {
+            #ifdef DEBUG
             printf(" >>> Hello from RTOS DMA Handler!\n");
+            #endif 
             bool xHigherPriorityTaskWoken{};
             this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
             if(xHigherPriorityTaskWoken)

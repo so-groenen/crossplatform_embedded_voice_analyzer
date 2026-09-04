@@ -25,7 +25,7 @@ class Dma
 protected:
     uint m_dma; 
     dma_channel_config m_config{};
-    uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
+    // uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
     static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
 public:
     explicit Dma(uint channel)
@@ -111,7 +111,7 @@ public:
     {
         channel_config_set_write_increment(&m_config, v);
     }
-    void write(std::span<uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
+    void write(std::span<const uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
     {
         channel_config_set_dreq(&m_config, dreq);
         // read from memory and send/WRITE to peripheral
@@ -206,15 +206,12 @@ public:
     }
 
     // interrupt handling:
-    void enable_channel(bool value)
+    void enable_channel(bool value, uint irqn_index = 0)
     {
-        dma_irqn_set_channel_enabled(m_irqn_index, m_dma, value);
+        dma_irqn_set_channel_enabled(irqn_index, m_dma, value);
     }
     // default is zero, and IRQ1 is rarely used.
-    void set_irqn(uint irqn_index)
-    {
-        m_irqn_index = irqn_index;
-    }
+
     bool is_busy() const 
     {
         return dma_channel_is_busy(m_dma);

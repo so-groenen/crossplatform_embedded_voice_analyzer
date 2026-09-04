@@ -18,7 +18,7 @@
 #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
-#include "arm_math_types.h"
+// #include "arm_math_types.h"
 #include "drivers/uart.hpp"
 #include <pico/stdio.h>
 #include <pico/time.h>
@@ -148,7 +148,6 @@ struct Packet_t
 #pragma pack(pop)
 
  
-static arm_rfft_fast_instance_f32 rfft_inst;
 static std::array<f32, FFT_SIZE> WINDOW_COEFFS{};
 static std::array<f32, FFT_SIZE> FFT_RESULT{};
 static std::array<f32, FFT_SIZE/2> MAGNITUDES{};
@@ -219,6 +218,9 @@ public:
 
 static RealFFT dsp{FFT_SIZE};
 
+ 
+using hardware::Uart;
+
 int main() 
 {
     stdio_init_all();
@@ -243,16 +245,16 @@ int main()
     constexpr u32 baudrate = 115200;
     constexpr bool is_tx   = true;
     
-    hardware::Uart uart{uart0, baudrate};
-    uart.init_dma(dma, is_tx);  
+    // auto uart = hardware::Uart::new_tx_dma(Dma{}, uart0, baudrate);
     
+    auto uart = Uart::make_tx_only(Dma{}, uart0);
+
+    uart.set_baudrate(baudrate);
+
     if(dsp.init() != ARM_MATH_SUCCESS)
         return -1;
 
  
-
-    
-    // std::array<f32, 4> arr = {42, 69, 67, 666};
 
     Packet_t tx_packet;
     tx_packet.header[0] = 0xAA;
@@ -281,31 +283,31 @@ int main()
     // uint32_t peak_idx = 0;
     uint32_t search_len = k_max - k_min + 1;
 
-
+    const char* h = "hello \n";
     while (true) 
     {
-        i2s.read_blocking(buffer, irqs.ready_flag());
+        // i2s.read_blocking(buffer, irqs.ready_flag());
 
-        dsp.convert_mono_i2s_u32_to_f32(buffer, SAMPLES);
-        dsp.window_f32_inplace(SAMPLES, WINDOW_COEFFS);
-        dsp.perform_fft(SAMPLES, FFT_RESULT);
-        dsp.compute_magnitude_squared(FFT_RESULT, MAGNITUDES); 
+        // dsp.convert_mono_i2s_u32_to_f32(buffer, SAMPLES);
+        // dsp.window_f32_inplace(SAMPLES, WINDOW_COEFFS);
+        // dsp.perform_fft(SAMPLES, FFT_RESULT);
+        // dsp.compute_magnitude_squared(FFT_RESULT, MAGNITUDES); 
 
-        auto [peak_idx, _] = dsp.find_max(std::span{MAGNITUDES}.subspan(k_min), search_len);
+        // auto [peak_idx, _] = dsp.find_max(std::span{MAGNITUDES}.subspan(k_min), search_len);
 
-        u32 peak_bin = k_min + peak_idx;
-        float est_freq = ((float)peak_bin) * bin_resolution;
+        // u32 peak_bin = k_min + peak_idx;
+        // f32 est_freq = ((float)peak_bin) * bin_resolution;
 
-        printf("Got: %f Hz +/- %f\n", est_freq, bin_resolution);
-        // // Populate payload  
-        // for(auto& value : SAMPLES)
-        // {
-        //     value = 1.0f - 2*(float)rand() / RAND_MAX;
-        // }
-        // constexpr u32 factor = 1000;
-        // // std::ranges::for_each(SAMPLES, [factor](float x) { x *= factor; });
+        // // printf("Got: %f Hz +/- %f\n", est_freq, bin_resolution);
+        // // // Populate payload  
+        // // for(auto& value : SAMPLES)
+        // // {
+        // //     value = 1.0f - 2*(float)rand() / RAND_MAX;
+        // // }
+        // // constexpr u32 factor = 1000;
+        // // // std::ranges::for_each(SAMPLES, [factor](float x) { x *= factor; });
 
-        // tx_packet.swap_sample(SAMPLES); 
+        tx_packet.swap_sample(SAMPLES); 
         // printf("Got: %f, %f, %f \n", tx_packet.samples[0], tx_packet.samples[1], tx_packet.samples[2]);
 
         // if(buffer[0] || buffer[2])
@@ -315,15 +317,16 @@ int main()
         //     // dma.config_transfer(uart.data_register(), &tx_packet, sizeof(tx_packet), true);
         //     printf("%lu; %d; %f \n", buffer[0], signed_sample, signed_f);
         // }
-
+        uart.send_dma(h, strlen(h) + 1);
+        
         // // tx_packet.swap_sample(SAMPLES);
         // if(uart.is_writable() && (count % 10 == 0) && !dma.is_busy())
         // if(dma.is_busy())
-        // uart.send_dma(dma, &tx_packet, sizeof(tx_packet));
+ 
 
             // uart.write_blocking(&tx_packet);
 
-        // sleep_ms(1000); // 10Hz transmission rate
+        sleep_ms(1000); // 10Hz transmission rate
     }
 }
 
