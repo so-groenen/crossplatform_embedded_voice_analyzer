@@ -26,6 +26,9 @@ namespace details
     // workaround for freeRTOS cyw43: cache last setting, and return if asked.
     inline bool __cyw43_led_state;
 
+
+
+
 template <bool UseCyw43>
 class Output 
 {

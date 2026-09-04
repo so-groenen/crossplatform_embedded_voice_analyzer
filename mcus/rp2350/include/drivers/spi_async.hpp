@@ -33,7 +33,8 @@ namespace spi {
 
 using namespace embedded_hal::blocking;
 using embedded_hal::blocking::SpiError;
- 
+using hardware::spi::Spi;
+using hardware::spi::Config;
 
 
 // Dma class wrapper for SPI: it features a convenience function to write to / from spi registers
@@ -80,6 +81,11 @@ public:
     protected:
         DmaForSpi<M> m_dma;
     public:
+        explicit SpiDma(Spi&& spi, Dma dma)
+            : Spi(std::move(spi)), m_dma{std::move(dma)} 
+        {
+        }
+        
         explicit SpiDma(spi_inst_t* spi, Dma dma)
             : Spi(spi), m_dma{std::move(dma)} 
         {
@@ -118,6 +124,10 @@ public:
         DmaForSpi<TransferMode::Tx> m_dma_tx;
         DmaForSpi<TransferMode::Rx> m_dma_rx;
     public:
+        explicit SpiDmaFull(const Spi& spi, Dma dma_tx, Dma dma_rx)
+            : Spi(spi), m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
+        {
+        }
         explicit SpiDmaFull(spi_inst_t* spi, Dma dma_tx, Dma dma_rx)
             : Spi(spi), m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
         {
@@ -172,7 +182,7 @@ public:
 
 
 
-namespace rtos 
+namespace async 
 {
     template<TransferMode M>
     class SpiAsync : public Spi
@@ -180,6 +190,11 @@ namespace rtos
         PicoTask& m_task;
         DmaForSpi<M> m_dma{};
     public:
+        SpiAsync(const Spi& spi, Dma dma, PicoTask* task, ::irq::IAsyncDmaHandler& irq)
+            : Spi(spi), m_dma{std::move(dma)}, m_task{*task}//, m_buffer(buffer)
+        {
+            irq.bind_interrupt_from_rtos(&m_dma, task);
+        }
         SpiAsync(spi_inst_t* spi, Dma dma, PicoTask* task, ::irq::IAsyncDmaHandler& irq)
             : Spi(spi), m_dma{std::move(dma)}, m_task{*task}//, m_buffer(buffer)
         {

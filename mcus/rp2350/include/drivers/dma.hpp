@@ -85,9 +85,7 @@ public:
                                 write_buff.data(),           // write address
                                 read_buff.data(),            // read address from memory
                                 read_buff.size(),       // element count (each element is of size transfer_data_size)
-                                false);     
-        
-        set_transfer_size<T>();
+                                false);             
     }
     // We read in memory FROM a buffer and send it to a register pointed to by write_addr
     template<std::integral T>
@@ -98,7 +96,6 @@ public:
                                 read_buff.data(),            // read address from memory
                                 read_buff.size(),       // element count (each element is of size transfer_data_size)
                                 false);     
-        set_transfer_size<T>();
     }
     // We read from a register and write in memory to a buffer and set the length of that buffer
     template<std::integral T>
@@ -109,8 +106,6 @@ public:
                                 read_addr,            // read address from memory
                                 write_buff.size(),       // element count (each element is of size transfer_data_size)
                                 false);     
-        
-        set_transfer_size<T>();
     }
     void write_to_memory(bool v)
     {

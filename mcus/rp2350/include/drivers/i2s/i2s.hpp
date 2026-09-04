@@ -5,6 +5,7 @@
 #include "drivers/dma.hpp"
 #include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/pio.hpp"
+#include "types.hpp"
 
 
 template<TransferMode M, std::integral T, pio::IsPioProgram P>
@@ -34,26 +35,38 @@ public:
         {
             setup_tx_mode();
         }
-
         irq.bind_interrupt(&m_dma);
+    }
+
+    static I2SHalfDuplex new_tx_32(
+            P& pio_,
+            std::span<u32> ping, 
+            std::span<u32> pong,
+            irq::IDmaHandler& irq)
+    {
+        return I2SHalfDuplex<TransferMode::Tx, u32, P>(pio_, ping, pong, irq);
     }
     void setup_rx_mode() requires (M == TransferMode::Rx)
     {
         m_dma.read_from_memory(false);
         m_dma.write_to_memory(true);
+        m_dma.set_transfer_size<T>();
         m_dma.set_data_request(m_pio.get_dreq(false));
         m_dma.config_transfer(
-            /*dest:*/ m_ping_pong[0],
-            /*src:*/  m_pio.get_rx_fifo_reg());
+            /*dest:*/ m_ping_pong[0].data(),
+            /*src:*/  m_pio.get_rx_fifo_reg(),
+            /*len:*/  m_ping_pong[0].size());
     }
     void setup_tx_mode() requires (M == TransferMode::Tx)
     {
         m_dma.read_from_memory(true);
         m_dma.write_to_memory(false);
+        m_dma.set_transfer_size<T>();
         m_dma.set_data_request(m_pio.get_dreq(true));
         m_dma.config_transfer(
-            /*dest:*/ m_ping_pong[0],
-            /*src:*/  m_pio.get_tx_fifo_reg());
+            /*dest:*/ m_pio.get_tx_fifo_reg(),
+            /*src:*/  m_ping_pong[0].data(), 
+                      m_ping_pong[0].size());
     }
     void start()
     {
@@ -65,7 +78,7 @@ public:
         m_pio.stop();
         m_dma.abort();
     }
-    void read_blocking(std::span<T> rx_buffer, bool& is_ready)
+    inline void read_blocking(std::span<T>& rx_buffer, bool& is_ready)
     {
         while(!is_ready)
         {
@@ -73,7 +86,7 @@ public:
         }
         m_processed_buff ^= 1; 
         m_dma.set_write_addr(m_ping_pong[m_processed_buff].data(), true);
-        is_ready = false;
+        is_ready  = false;
         rx_buffer = m_ping_pong[m_processed_buff ^ 1];
     }
     inline auto write_blocking(bool& is_ready)
@@ -88,6 +101,6 @@ public:
         return m_ping_pong[m_processed_buff ^ 1];
     }
 };
- 
+
 
 #endif

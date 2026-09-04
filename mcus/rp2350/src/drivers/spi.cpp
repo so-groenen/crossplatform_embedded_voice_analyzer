@@ -1,6 +1,6 @@
 #include "drivers/spi.hpp"
  
-namespace spi {
+namespace hardware::spi {
 
 
 
@@ -12,6 +12,7 @@ Spi::Spi(spi_inst_t* spi, const spi::Config& config)
     : m_spi{spi}
 {
     // spi_init(m_spi, config.baudrate);
+    // init_from_config(m_spi, config);
     spi_set_format(m_spi, 8, config.polarity, config.phase, SPI_MSB_FIRST);
 }
 void Spi::set_config(const spi::Config& config)
