@@ -38,14 +38,14 @@
 #include "projdefs.h"
 #include "drivers/async_input_handler.hpp"
 #include "stats.hpp" 
-
+#include <array>
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
 #include "drivers/async_dma_handler.hpp"
 #include "types.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
-#define TEST_SIZE 1024
+// #define TEST_SIZE 1024
 
 
 constexpr size_t N_CHANNELS = 1;
@@ -55,48 +55,70 @@ constexpr size_t N_CHANNELS = 1;
 // base: Do not record / block / unblock tasks 
 
 
-bind_base_interrupt_DMA_0(irqs, my_handler, N_CHANNELS);
-
-
-
-// Everytime a Dma transfer, enabled by the irq_handler, fires, an interrupt is triggered
-class DmaEnabledIRQ : public Dma
+class DmaIrqTest : public DmaHandlerBase<DmaIrq::IRQ_0, N_CHANNELS>
 {
 public:
-    explicit DmaEnabledIRQ(uint channel, irq::IDmaHandler& irq_handler)
-        : Dma(channel)
+    DmaIrqTest(irq_handler_t handler)
+       : DmaHandlerBase<DmaIrq::IRQ_0, N_CHANNELS>(handler)
     {
-        irq_handler.bind_interrupt(this);
+    }
+    inline void handle_inst(size_t n) override 
+    {
+        printf(">>>> Hello From Interrupt \n");
     }
 };
 
-using hardware::spi::Spi;
+void my_handler();
+DmaIrqTest irqs{my_handler};
+void my_handler()
+{
+    irqs.handle_isr();
+}
+
+// Everytime a Dma transfer, enabled by the irq_handler, fires, an interrupt is triggered
+// class DmaEnabledIRQ : public Dma
+// {
+// public:
+//     explicit DmaEnabledIRQ(uint channel, irq::IDmaHandler& irq_handler)
+//         : Dma(channel)
+//     {
+//         irq_handler.bind_interrupt(this);
+//     }
+// };
+
+// using hardware::spi::Spi;
+using namespace hardware::spi;
+
+constexpr uint DMA_CH0{0};
+constexpr uint DMA_CH1{1};
+constexpr size_t TEST_SIZE{1024};
 
 class HelloDmaRtosTask : public PicoTask
 {   
-    
+    SpiDmaImpl<SpiMode::RxTx> m_spi;
 public:
-    HelloDmaRtosTask()
-        : PicoTask(1, 512, "DMA-test-task")
+    HelloDmaRtosTask(const spi::Config& config)
+        : PicoTask(1, 512, "DMA-test-task"), 
+        m_spi(SpiFactory::make(spi_default, 
+                               PICO_DEFAULT_SPI_SCK_PIN,
+                               PICO_DEFAULT_SPI_TX_PIN, 
+                               PICO_DEFAULT_SPI_RX_PIN,  
+                               Dma{DMA_CH0}, 
+                               Dma{DMA_CH1}, 
+                               config))
     {
-
-        spi_init(spi_default, 1000 * 1000);
- 
-        auto config = spi::Config::create_default();
-        auto _spi   = Spi::create(spi_default, 
-                                  PICO_DEFAULT_SPI_SCK_PIN,
-                                  PICO_DEFAULT_SPI_TX_PIN,
-                                  PICO_DEFAULT_SPI_RX_PIN, 
-                                  config);
-        _spi.enable_loop_back(true);
+        m_spi.enable_loop_back(true);
+        irqs.bind_interrupt(&m_spi.dma_tx()); 
     }
     static void check_buffs(std::span<uint8_t> rbuff, std::span<uint8_t> tbuff)
     {
         printf("Done. Checking...");
-        for (uint i = 0; i < rbuff.size(); ++i) {
-            if (rbuff[i] != rbuff[i]) {
+        for (uint i = 0; i < rbuff.size(); ++i) 
+        {
+            if (rbuff[i] != rbuff[i]) 
+            {
                 panic("Mismatch at %d/%d: expected %02x, got %02x",
-                    i, TEST_SIZE, tbuff[i], rbuff[i]
+                    i, rbuff.size(), tbuff[i], rbuff[i]
                 );
             }
         } 
@@ -104,7 +126,7 @@ public:
     }
     static void randomize_buff(std::span<uint8_t> rbuff)
     {
-        for (uint i = 0; i < TEST_SIZE; ++i) 
+        for (uint i = 0; i < rbuff.size(); ++i) 
         {
             rbuff[i] = rand();
         }
@@ -113,17 +135,9 @@ public:
     
     void taskFunction() override
     {
-        static uint8_t txbuf[TEST_SIZE];
-        static uint8_t rxbuf[TEST_SIZE];
+        static std::array<u8, TEST_SIZE> txbuf{};
+        static std::array<u8, TEST_SIZE> rxbuf{};
 
-        constexpr uint DMA_CH0{0};
-        constexpr uint DMA_CH1{1};
-
-        using spi::SpiDma;
- 
-        SpiDma<TransferMode::Rx> spi_rx{spi_default, DmaEnabledIRQ{DMA_CH0, irqs}};
-        SpiDma<TransferMode::Tx> spi_tx{spi_default, Dma{DMA_CH1}};
-         
         if(!dma_channel_is_claimed(DMA_CH0))
             panic("channel 0 not claimed");
 
@@ -132,7 +146,7 @@ public:
 
 
         Rtos_sleep_ms(3000);
-        printf("-- DMA TESTS -- [baudrate:%u]\n", spi_rx.baudrate());
+        printf("-- DMA TESTS -- [baudrate:%u]\n", m_spi.get_baudrate());
         Rtos_sleep_ms(3000);
 
         // We set the outbound DMA to transfer from a memory buffer to the SPI transmit FIFO paced by the SPI TX FIFO DREQ
@@ -143,17 +157,21 @@ public:
             printf("-- DMA basic transfer \n");
             randomize_buff(txbuf);
 
-            spi_tx.write_async(txbuf, false);
-            spi_rx.read_async(rxbuf, false);
-            Dma* instances[] = {&spi_rx.dma(), &spi_tx.dma()};
+            m_spi.write_dma(txbuf, false);
+            m_spi.read_dma(rxbuf, false);
+
+
+            Dma* instances[] = {&m_spi.dma_rx(), &m_spi.dma_tx()};
             Dma::start_multiple(instances);
 
-            spi_rx.dma().await_blocking();
-
-            if (spi_tx.dma().is_busy())
+   
+            m_spi.dma_rx().await_blocking();
+            if (m_spi.dma_tx().is_busy())
             {
                 panic("RX completed before TX");
             }
+
+
             check_buffs(rxbuf, txbuf);
             Rtos_sleep_ms(3000);
 
@@ -161,12 +179,26 @@ public:
             printf("-- blocking spi inplace transfer -- \n");
             randomize_buff(txbuf);
 
-            auto res = spi_tx.transfer_blocking(rxbuf, txbuf);
+            auto res = m_spi.transfer_blocking(rxbuf, txbuf);
+ 
             if(!res)
                 panic("transfer error!");
             check_buffs(rxbuf, txbuf);
             Rtos_sleep_ms(3000);
 
+            printf("-- non-blocking spi inplace transfer -- \n");
+            randomize_buff(txbuf);
+
+            m_spi.transfer_dma(rxbuf, txbuf);
+ 
+            m_spi.dma_rx().await_blocking();
+            if (m_spi.dma_tx().is_busy())
+            {
+                panic("transfer_dma: RX completed before TX");
+            }
+
+            check_buffs(rxbuf, txbuf);
+            Rtos_sleep_ms(3000);
         }
     }
 };
@@ -177,8 +209,10 @@ int main()
 {
     stdio_init_all();
 
+    auto config = spi::Config::create_default();
+    config.baudrate = 1000 * 1000;
 
-    static HelloDmaRtosTask dma_task{};
+    static HelloDmaRtosTask dma_task{config};
 
     constexpr uint32_t stats_ms{20'000};
     static StatsTask stats{stats_ms};
