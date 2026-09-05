@@ -9,6 +9,7 @@
 #include <hardware/regs/intctrl.h>
 #include <hardware/sync.h>
 #include <limits>
+#include <optional>
 #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
@@ -19,6 +20,7 @@
 #include <type_traits>
  
 #include "hardware/dma.h"
+#include "types.hpp"
  
 class Dma
 {
@@ -231,4 +233,85 @@ public:
         dma_start_channel_mask(mask);
     }
 };
-  
+
+
+template<class T>
+concept HasDataRegister = requires (T a)
+{
+    {a.data_register()} -> std::same_as<io_rw_32*>;
+};
+
+template<TransferMode M>
+class DmaDuplex : public Dma
+{
+protected:
+    std::optional<Dma> m_dma_tx{std::nullopt};
+    std::optional<Dma> m_dma_rx{std::nullopt};
+private:
+    void init_dma_tx(u32 data_request_reg)
+    {
+        if(!m_dma_tx)
+            return;
+
+        m_dma_tx->set_data_request(data_request_reg);
+        m_dma_tx->set_transfer_size<u8>();
+        m_dma_tx->write_to_memory(false);
+        m_dma_tx->read_from_memory(true);
+    }
+    void init_dma_rx(u32 data_request_reg)
+    {
+        if(!m_dma_rx)
+            return;
+
+        m_dma_rx->set_data_request(data_request_reg);
+        m_dma_rx->set_transfer_size<u8>();
+        m_dma_rx->write_to_memory(true);
+        m_dma_rx->read_from_memory(false);
+    }
+public:
+
+    explicit DmaDuplex(Dma dma_tx, u32 data_request_reg) requires (M == TransferMode::Tx)
+        : m_dma_tx{std::move(dma_tx)}
+    {
+        init_dma_tx(data_request_reg);
+    }
+
+    explicit DmaDuplex(Dma dma_rx, u32 data_request_reg) requires (M == TransferMode::Rx)
+        : m_dma_rx{std::move(dma_rx)}
+    {
+        init_dma_rx(data_request_reg);
+    }
+
+    explicit DmaDuplex(Dma dma_tx, Dma dma_rx, u32 tx_dreq, u32 rx_dreq) requires (M == TransferMode::RxTx)
+        : m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
+    {
+        init_dma_rx(rx_dreq);
+        init_dma_tx(tx_dreq);
+    }
+
+    Dma& dma_tx() requires (M == TransferMode::Tx || M == TransferMode::RxTx)
+    {
+        return m_dma_tx.value();
+    }
+    Dma& dma_rx() requires (M == TransferMode::Rx || M == TransferMode::RxTx)
+    {
+        return m_dma_rx.value();
+    }
+protected:
+    template<HasDataRegister T>
+    inline void write_to_peripheral(T* periph, std::span<const u8> tx_buff, bool start = true) requires (M == TransferMode::Tx || M == TransferMode::RxTx)
+    {   
+        m_dma_tx->config_transfer(periph->data_register(),
+                                  tx_buff.data(),
+                                  tx_buff.size(), 
+                                  start);
+    }
+    template<HasDataRegister T>
+    inline void read_from_peripheral(T* periph, std::span<u8> rx_buff, bool start = true) requires (M == TransferMode::Rx || M == TransferMode::RxTx)
+    {
+        m_dma_rx->config_transfer(rx_buff.data(),
+                                  periph->data_register(),
+                                  rx_buff.size(), 
+                                  start);
+    }
+};
