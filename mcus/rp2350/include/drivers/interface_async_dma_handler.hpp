@@ -47,7 +47,7 @@ namespace irq
     {
     public:
         virtual ~IDmaHandler() = default;
-        virtual void bind_interrupt(Dma* dma) = 0;
+        virtual bool& bind_interrupt(Dma* dma) = 0;
     };
 
     class IAsyncDmaHandler

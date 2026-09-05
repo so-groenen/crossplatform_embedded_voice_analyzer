@@ -59,6 +59,7 @@ class DmaHandlerBase: public irq::IDmaHandler
 public:
     irq_handler_t m_handler{};
     Vector<uint, N_Channels> m_dma_channels{};
+    Vector<bool, N_Channels> m_ready_flags{};
     bool is_event(size_t n) const
     {
         if constexpr (IRQ_n == DMA_IRQ_0)
@@ -86,8 +87,10 @@ public:
         : m_handler(handler)//, m_irqn(irqn)
     {
     }
-    void bind_interrupt(Dma* dma) override
+    // returns a "ready flag, which will be set to True when it fires"
+    bool& bind_interrupt(Dma* dma) override
     {
+        size_t n = m_dma_channels.size();
         m_dma_channels.push_back(dma->channel());
         // if constexpr (IRQ_n == DMA_IRQ_0)
         // {
@@ -105,6 +108,7 @@ public:
             irq_set_enabled(IRQ_n, true);
             bound = true;
         }
+        return m_ready_flags[n];
     }
     inline void handle_inst(size_t n) override 
     {
@@ -116,6 +120,7 @@ public:
         {
             if(this->is_event(n))
             {
+                m_ready_flags[n] = true;
                 this->acknowledge_isr(n);
                 handle_inst(n);
             }
