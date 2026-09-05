@@ -56,12 +56,18 @@ struct Config
 
 
 
-enum class SpiMode 
-{
-    Tx, Rx, RxTx,
-};
 
-template<SpiMode M>
+
+ 
+
+template <typename T, IOMode I, TransferMode M>
+inline constexpr bool is_spi_implementation = false;
+
+template <typename T, IOMode I, TransferMode M>
+concept SpiImpl = is_spi_implementation<T, I, M>;
+
+
+template<TransferMode M>
 class SpiBlocking
 {
 protected:
@@ -91,7 +97,7 @@ public:
         spi_set_baudrate(m_spi, config.baudrate);
         spi_set_format(m_spi, config.data_bits, config.polarity, config.phase, config.order);
     }
-    io_rw_32* data_register()
+    io_rw_32* data_register() const
     {
         return &spi_get_hw(m_spi)->dr;
     }
@@ -103,7 +109,7 @@ public:
     {
         return spi_get_baudrate(m_spi);
     }
-    auto write_blocking(const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError> requires (M == SpiMode::Tx || M == SpiMode::RxTx)
+    auto write_blocking(const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError> requires (M == TransferMode::Tx || M == TransferMode::RxTx)
     {
         int bytes_written = spi_write_blocking(m_spi, tx_buff.data(), tx_buff.size());
         if(bytes_written != tx_buff.size())
@@ -112,7 +118,7 @@ public:
         }
         return{};
     }
-    auto read_blocking(std::span<uint8_t> rx_buff) -> std::expected<void, SpiError> requires (M == SpiMode::Rx || M == SpiMode::RxTx)
+    auto read_blocking(std::span<uint8_t> rx_buff) -> std::expected<void, SpiError> requires (M == TransferMode::Rx || M == TransferMode::RxTx)
     {
         // 0x00 is dummy values that we are sending, because the way SPI works, as data is shifted in, some is shifted out
         // this is how shift registers work.
@@ -123,7 +129,7 @@ public:
         }
         return{};
     }
-    bool is_readable() const requires (M == SpiMode::Rx || M == SpiMode::RxTx)
+    bool is_readable() const requires (M == TransferMode::Rx || M == TransferMode::RxTx)
     {
         return spi_is_readable(m_spi);
     }
@@ -131,11 +137,11 @@ public:
     {
         return spi_is_busy(m_spi);
     }
-    bool is_writable() const requires (M == SpiMode::Tx || M == SpiMode::RxTx)
+    bool is_writable() const requires (M == TransferMode::Tx || M == TransferMode::RxTx)
     {
         return spi_is_writable(m_spi);
     }
-    auto transfer_blocking(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError>  requires (M == SpiMode::RxTx)
+    auto transfer_blocking(std::span<uint8_t> rx_buff, const std::span<uint8_t> tx_buff) -> std::expected<void, SpiError>  requires (M == TransferMode::RxTx)
     {
         if(tx_buff.size() != tx_buff.size())
             return std::unexpected{SpiError::SizeMismatch};
@@ -155,80 +161,45 @@ public:
         //     spi_deinit(m_spi);
     }   
 };
- 
 
-template<SpiMode M>
-class SpiDma : public SpiBlocking<M>
+
+// Register this implementation with the concept system
+template <typename T, TransferMode M>
+inline constexpr bool is_spi_implementation<T, IOMode::Blocking, M> = std::same_as<T, SpiBlocking<M>>; 
+
+
+
+template<TransferMode M>
+class SpiDma : public SpiBlocking<M> , public DmaDuplex<M>
 {
-protected:
-    std::optional<Dma> m_dma_tx{std::nullopt};
-    std::optional<Dma> m_dma_rx{std::nullopt};
-private:
-    void init_dma_tx()
-    {
-        if(!m_dma_tx)
-            return;
 
-        m_dma_tx->set_data_request(this->get_dreq(true));
-        m_dma_tx->set_transfer_size<u8>();
-        m_dma_tx->write_to_memory(false);
-        m_dma_tx->read_from_memory(true);
-    }
-    void init_dma_rx()
-    {
-        if(!m_dma_rx)
-            return;
-
-        m_dma_rx->set_data_request(this->get_dreq(false));
-        m_dma_rx->set_transfer_size<u8>();
-        m_dma_rx->write_to_memory(true);
-        m_dma_rx->read_from_memory(false);
-    }
 public:
 
-    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, const spi::Config& config) requires (M == SpiMode::Tx)
-        : SpiBlocking<M>{spi, config}, m_dma_tx{std::move(dma_tx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, const spi::Config& config) requires (M == TransferMode::Tx)
+        : SpiBlocking<M>{spi, config}, DmaDuplex<TransferMode::Tx>{std::move(dma_tx), this->get_dreq(true)}
     {
-        init_dma_tx();
     }
 
-    explicit SpiDma(spi_inst_t* spi, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::Rx)
-        : SpiBlocking<M>{spi, config}, m_dma_rx{std::move(dma_rx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_rx, const spi::Config& config) requires (M == TransferMode::Rx)
+        : SpiBlocking<M>{spi, config}, DmaDuplex<TransferMode::Rx>{std::move(dma_rx), this->get_dreq(false)}
     {
-        init_dma_rx();
     }
 
-    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, const spi::Config& config) requires (M == SpiMode::RxTx)
-        : SpiBlocking<M>{spi, config}, m_dma_tx{std::move(dma_tx)}, m_dma_rx{std::move(dma_rx)}
+    explicit SpiDma(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, const spi::Config& config) requires (M == TransferMode::RxTx)
+        : SpiBlocking<M>{spi, config},  DmaDuplex<TransferMode::RxTx>{std::move(dma_tx), std::move(dma_rx), this->get_dreq(true), this->get_dreq(false)}
     {
-        init_dma_rx();
-        init_dma_tx();
     }
 
-    Dma& dma_tx() requires (M == SpiMode::Tx || M == SpiMode::RxTx)
-    {
-        return m_dma_tx.value();
-    }
-    Dma& dma_rx() requires (M == SpiMode::Rx || M == SpiMode::RxTx)
-    {
-        return m_dma_rx.value();
-    }
-    void write_dma(std::span<const u8> tx_buff, bool start = true) requires (M == SpiMode::Tx || M == SpiMode::RxTx)
+    inline void write_dma(std::span<const u8> tx_buff, bool start = true) requires (M == TransferMode::Tx || M == TransferMode::RxTx)
     {   
-        m_dma_tx->config_transfer(this->data_register(),
-                                  tx_buff.data(),
-                                  tx_buff.size(), 
-                                  start);
+        this->write_to_peripheral(this, tx_buff, start);
     }
-    void read_dma(std::span<u8> rx_buff, bool start = true) requires (M == SpiMode::Rx || M == SpiMode::RxTx)
+    inline void read_dma(std::span<u8> rx_buff, bool start = true) requires (M == TransferMode::Rx || M == TransferMode::RxTx)
     {
-        m_dma_rx->config_transfer(rx_buff.data(),
-                                  this->data_register(),
-                                  rx_buff.size(), 
-                                  start);
+        this->read_from_peripheral(this, rx_buff, start);
     }
 
-    void transfer_dma(std::span<uint8_t> rx_buff, std::span<const u8> tx_buff, bool start = true) requires (M == SpiMode::RxTx)
+    void transfer_dma(std::span<uint8_t> rx_buff, std::span<const u8> tx_buff, bool start = true) requires (M == TransferMode::RxTx)
     {
         write_dma(tx_buff, 
                   false);
@@ -238,75 +209,75 @@ public:
         if(!start)
             return;
 
-        dma_start_channel_mask( (1u << m_dma_tx->channel()) | (1u << m_dma_rx->channel())  );
+        dma_start_channel_mask( (1u << this->dma_tx().channel()) | (1u << this->dma_rx().channel())  );
     }
 };
 
 
 
+ // Register this implementation with the concept system
+template <typename T, TransferMode M>
+inline constexpr bool is_spi_implementation<T, IOMode::NonBlocking, M> = std::same_as<T, SpiDma<M>>; 
  
 
-template<IOMode Io>
+
+template<IOMode Io, TransferMode M>
 class Spi;
- 
 
-template<>
-class Spi<IOMode::Blocking> 
+template<TransferMode M>
+class Spi<IOMode::Blocking, M>
 {
 public:
-    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, u32 miso_pin, const Config& config) -> SpiBlocking<SpiMode::RxTx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, u32 miso_pin, const Config& config) -> SpiBlocking<TransferMode::RxTx> requires(M==TransferMode::RxTx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiBlocking<SpiMode::RxTx>{inst, config};
+        return SpiBlocking<TransferMode::RxTx>{inst, config};
     }   
     
-    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<SpiMode::Tx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<TransferMode::Tx>  requires(M==TransferMode::Tx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiBlocking<SpiMode::Tx>{inst, config};
+        return SpiBlocking<TransferMode::Tx>{inst, config};
     }   
  
-    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<SpiMode::Tx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin, u32 mosi_pin, const Config& config) -> SpiBlocking<TransferMode::Rx>  requires(M==TransferMode::Rx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiBlocking<SpiMode::Tx>{inst, config};
+        return SpiBlocking<TransferMode::Rx>{inst, config};
     }   
-   
 };
 
-
-template<>
-class Spi<IOMode::NonBlocking> 
+template<TransferMode M>
+class Spi<IOMode::NonBlocking, M> 
 {
 public:
     
-    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, const Config& config) -> SpiDma<SpiMode::RxTx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, const Config& config) -> SpiDma<TransferMode::RxTx> requires(M==TransferMode::RxTx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiDma<SpiMode::RxTx>{inst, std::move(dma_tx), std::move(dma_rx), config};
+        return SpiDma<TransferMode::RxTx>{inst, std::move(dma_tx), std::move(dma_rx), config};
     }   
  
-    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, const Config& config) -> SpiDma<SpiMode::Tx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, const Config& config) -> SpiDma<TransferMode::Tx> requires(M==TransferMode::Tx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
-        return SpiDma<SpiMode::Tx>{inst, std::move(dma_tx), config};
+        return SpiDma<TransferMode::Tx>{inst, std::move(dma_tx), config};
     }   
 
  
-    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, const Config& config) -> SpiDma<SpiMode::Rx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, const Config& config) -> SpiDma<TransferMode::Rx> requires(M==TransferMode::Rx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
-        return SpiDma<SpiMode::Rx>{inst, std::move(dma_rx), config};
+        return SpiDma<TransferMode::Rx>{inst, std::move(dma_rx), config};
     }   
 };
- 
 
 } // hardware
