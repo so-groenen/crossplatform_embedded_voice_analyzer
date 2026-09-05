@@ -40,7 +40,9 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     pico_runtime
     pico_stdio_usb
     hardware_pio
+    # pico_cyw43_arch_lwip_threadsafe_background
     pico_cyw43_arch_lwip_sys_freertos
+    # pico_cyw43_arch_lwip_poll
     FreeRTOS-Kernel-Heap4
     embedded_hal
     FreeRTOS-Cpp

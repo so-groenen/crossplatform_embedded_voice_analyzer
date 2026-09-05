@@ -4,6 +4,8 @@
 
 
 #include <cstddef>
+#include <cstdio>
+#include <span>
 #include <type_traits>
 #include <utility>
 #include <concepts>
@@ -145,6 +147,49 @@ namespace heapless
 
 
 
+
+
+
+    template <size_t MAX_CHAR>
+    class WriteBuffer
+    {
+    private:
+        std::array<char, MAX_CHAR> m_buffer{};
+        size_t m_written{};
+    public:
+        // Uses variadic templates and forward-arguments to pass cleanly to snprintf
+        template <typename... Args>
+        bool write(const char* format, Args... args) 
+        {
+    
+            int result = std::snprintf(m_buffer.data(), m_buffer.size(), format, args...);
+
+            if(result < 0)
+            {
+                return false; 
+            }
+
+            m_written = result;
+            return true;
         }
+
+        std::span<const char> get() const 
+        {
+            return std::span{m_buffer}.first(m_written + 1);
+        }
+
+        void reset() 
+        {
+            m_written = 0;
+            m_buffer[0] = '\0';
+        }
+    };
+
+
+
+
+
+
+    }
 }
 #endif

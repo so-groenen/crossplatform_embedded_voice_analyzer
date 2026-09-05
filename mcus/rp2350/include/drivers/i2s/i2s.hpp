@@ -36,16 +36,31 @@ public:
             setup_tx_mode();
         }
         irq.bind_interrupt(&m_dma);
+        m_dma.enable_channel(true);
     }
-
-    static I2SHalfDuplex new_tx_32(
-            P& pio_,
-            std::span<u32> ping, 
-            std::span<u32> pong,
+    I2SHalfDuplex(P& pio_,
+            std::span<T> ping, 
+            std::span<T> pong,
+            Dma dma,
             irq::IDmaHandler& irq)
+        : m_pio(pio_), m_dma{std::move(dma)}
     {
-        return I2SHalfDuplex<TransferMode::Tx, u32, P>(pio_, ping, pong, irq);
+        assert(ping.size() == pong.size());
+        m_ping_pong[0] = ping;
+        m_ping_pong[1] = pong;
+
+        if constexpr (M == TransferMode::Rx)
+        {
+            setup_rx_mode();
+        }
+        if constexpr (M == TransferMode::Tx)
+        {
+            setup_tx_mode();
+        }
+        irq.bind_interrupt(&m_dma);
+        m_dma.enable_channel(true);
     }
+ 
     void setup_rx_mode() requires (M == TransferMode::Rx)
     {
         m_dma.read_from_memory(false);
@@ -89,6 +104,17 @@ public:
         is_ready  = false;
         rx_buffer = m_ping_pong[m_processed_buff ^ 1];
     }
+    inline void read_non_blocking(std::span<T>& rx_buffer, bool& is_ready)
+    {
+        if(!is_ready)
+            return;
+
+        m_processed_buff ^= 1; 
+        m_dma.set_write_addr(m_ping_pong[m_processed_buff].data(), true);
+        is_ready  = false;
+        rx_buffer = m_ping_pong[m_processed_buff ^ 1];
+    }
+
     inline auto write_blocking(bool& is_ready)
     {
         while(!is_ready)

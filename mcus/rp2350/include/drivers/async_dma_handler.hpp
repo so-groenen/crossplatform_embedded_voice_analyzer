@@ -89,7 +89,7 @@ public:
     void bind_interrupt(Dma* dma) override
     {
         m_dma_channels.push_back(dma->channel());
-        // if constexpr (IRQ_n == DmaIrq::IRQ_1)
+        // if constexpr (IRQ_n == DMA_IRQ_0)
         // {
         //     dma->enable_channel(true, 1);
         // }

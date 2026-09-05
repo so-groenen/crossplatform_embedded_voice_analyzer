@@ -204,7 +204,7 @@ public:
 //     {
 //         return m_dma_rx.value();
 //     }
-//     inline void send_dma(const volatile void* read_addr, size_t transfer_count) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
+//     inline void write_dma(const volatile void* read_addr, size_t transfer_count) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
 //     {
 //         m_dma_tx->config_transfer(this->data_register(), read_addr, transfer_count, true);
 //     }
@@ -235,7 +235,7 @@ public:
         // set_tx();
         // set_rx();
     }
-    inline void send_dma(std::span<u8> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
+    inline void write_dma(std::span<u8> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
     {
         this->write_to_peripheral(this, rx_buff);
     }
@@ -244,16 +244,16 @@ public:
         this->read_from_peripheral(this, tx_buff);
     }
 
-    inline void send_dma(std::span<const char> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
+    inline void write_dma(std::span<const char> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
     {
-        this->write_to_peripheral(this, rx_buff.data(), rx_buff.size_bytes());
+        this->write_to_peripheral(this, reinterpret_cast<const u8*>(rx_buff.data()), rx_buff.size());
     }
     inline void read_dma(std::span<char> tx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Rx)
     {
-        this->read_from_peripheral(this, tx_buff.data(), tx_buff.size_bytes());
+        this->read_from_peripheral(this, reinterpret_cast<u8*>(tx_buff.data()), tx_buff.size());
     }
 
-    inline void send_dma(const volatile void* read_addr, size_t transfer_count) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
+    inline void write_dma(const volatile void* read_addr, size_t transfer_count) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
     {
         this->write_to_peripheral(this, read_addr, transfer_count);
         // m_dma_tx->config_transfer(this->data_register(), read_addr, transfer_count, true);
