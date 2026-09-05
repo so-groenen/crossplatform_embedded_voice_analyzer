@@ -7,6 +7,8 @@
 # TARGET 	     := test_raw_dma
 # TARGET 		 := test_embedded_hal
 TARGET 		 := test_rtos_spi
+# TARGET 	     := test_uart
+
 
 BUILD_DIR      := build
 PRESET		   := pico2-debug

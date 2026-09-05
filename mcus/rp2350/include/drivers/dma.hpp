@@ -113,34 +113,34 @@ public:
     {
         channel_config_set_write_increment(&m_config, v);
     }
-    void write(std::span<const uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
-    {
-        channel_config_set_dreq(&m_config, dreq);
-        // read from memory and send/WRITE to peripheral
-        read_from_memory(true); 
-        write_to_memory(false);
-        dma_channel_configure(m_dma, 
-                                &m_config,
-                                write_addr,           // write address
-                                buff_to_send.data(),  // read address from memory
-                                buff_to_send.size(),  // element count (each element is of size transfer_data_size)
-                                start);     
-    }
+    // void write(std::span<const uint8_t> buff_to_send, volatile void * write_addr, uint dreq, bool start)
+    // {
+    //     channel_config_set_dreq(&m_config, dreq);
+    //     // read from memory and send/WRITE to peripheral
+    //     read_from_memory(true); 
+    //     write_to_memory(false);
+    //     dma_channel_configure(m_dma, 
+    //                             &m_config,
+    //                             write_addr,           // write address
+    //                             buff_to_send.data(),  // read address from memory
+    //                             buff_to_send.size(),  // element count (each element is of size transfer_data_size)
+    //                             start);     
+    // }
  
-    // read from read_addr (for ex Spi-data register) and write into rx_buffer
-    void read(std::span<uint8_t> rx_buff, const volatile void * read_addr, uint dreq, bool start)
-    {
-        channel_config_set_dreq(&m_config, dreq);
-        // read from peripheral register and write to memory
-        read_from_memory(false); 
-        write_to_memory(true);
-        dma_channel_configure(m_dma, 
-                            &m_config,
-                            rx_buff.data(),            // write address in memory
-                            read_addr,                 // read from periph address
-                            rx_buff.size(),            
-                            start);                     
-    }
+    // // read from read_addr (for ex Spi-data register) and write into rx_buffer
+    // void read(std::span<uint8_t> rx_buff, const volatile void * read_addr, uint dreq, bool start)
+    // {
+    //     channel_config_set_dreq(&m_config, dreq);
+    //     // read from peripheral register and write to memory
+    //     read_from_memory(false); 
+    //     write_to_memory(true);
+    //     dma_channel_configure(m_dma, 
+    //                         &m_config,
+    //                         rx_buff.data(),            // write address in memory
+    //                         read_addr,                 // read from periph address
+    //                         rx_buff.size(),            
+    //                         start);                     
+    // }
     inline void set_write_addr(volatile void* write_addr, bool start = false)
     {
         dma_channel_set_write_addr(m_dma, write_addr, start);   
@@ -190,7 +190,7 @@ public:
             panic("DMA Infer Sized Not implemented");
         }
     }
-     template<std::floating_point T>
+    template<std::floating_point T>
     void set_transfer_size()
     {
         if constexpr (sizeof(T) == 4) 
@@ -307,6 +307,22 @@ protected:
                                   start);
     }
     template<HasDataRegister T>
+    inline void write_to_peripheral(T* periph, const volatile void* tx_buff, size_t len, bool start = true) requires (M == TransferMode::Tx || M == TransferMode::RxTx)
+    {   
+        m_dma_tx->config_transfer(periph->data_register(),
+                                  tx_buff,
+                                  len, 
+                                  start);
+    }
+    template<HasDataRegister T>
+    inline void read_from_peripheral(T* periph, volatile void* rx_buff, size_t len, bool start = true) requires (M == TransferMode::Rx || M == TransferMode::RxTx)
+    {
+        m_dma_rx->config_transfer(rx_buff,
+                                  periph->data_register(),
+                                  len, 
+                                  start);
+    }
+    template<HasDataRegister T>
     inline void read_from_peripheral(T* periph, std::span<u8> rx_buff, bool start = true) requires (M == TransferMode::Rx || M == TransferMode::RxTx)
     {
         m_dma_rx->config_transfer(rx_buff.data(),
@@ -315,3 +331,5 @@ protected:
                                   start);
     }
 };
+
+ 

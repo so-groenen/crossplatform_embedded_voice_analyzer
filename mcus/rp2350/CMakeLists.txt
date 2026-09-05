@@ -129,5 +129,14 @@ if(BUILD_TESTS)
         ${DRIVER_SRC}
     )
     configure_picor_rtos_target(test_embedded_hal)
+
+    add_executable(test_uart
+        src/tests/uart_dma_test.cpp 
+        ${DRIVER_SRC}
+    )
+    configure_picor_rtos_target(test_uart)
+
+
+
 endif()
  

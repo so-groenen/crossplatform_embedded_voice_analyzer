@@ -52,7 +52,7 @@ constexpr uint DMA_CH1      = 1;
 // use it to register N_channel = 1 interrupt from DMA channel
 // and also register the corresponding task to block / unblock it!
 
-bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
+bind_interrupt_DMA_0(irqs, my_handler, N_CHANNELS);
 
 
  
@@ -106,7 +106,7 @@ public:
 
         auto config     = spi::Config::create_default();
         config.baudrate = 1000 * 1000;
-        auto spi        = Spi<IOMode::Rtos>::make(spi_default, 
+        auto spi        = Spi<IOMode::Rtos, TransferMode::RxTx>::make(spi_default, 
                 PICO_DEFAULT_SPI_SCK_PIN, 
                 PICO_DEFAULT_SPI_TX_PIN, 
                 PICO_DEFAULT_SPI_RX_PIN, 

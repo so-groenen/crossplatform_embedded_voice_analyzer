@@ -55,11 +55,11 @@ constexpr size_t N_CHANNELS = 1;
 // base: Do not record / block / unblock tasks 
 
 
-class DmaIrqTest : public DmaHandlerBase<DmaIrq::IRQ_0, N_CHANNELS>
+class DmaIrqTest : public DmaHandlerBase<DMA_IRQ_0, N_CHANNELS>
 {
 public:
     DmaIrqTest(irq_handler_t handler)
-       : DmaHandlerBase<DmaIrq::IRQ_0, N_CHANNELS>(handler)
+       : DmaHandlerBase<DMA_IRQ_0, N_CHANNELS>(handler)
     {
     }
     inline void handle_inst(size_t n) override 
@@ -82,20 +82,17 @@ constexpr uint DMA_CH0{0};
 constexpr uint DMA_CH1{1};
 constexpr size_t TEST_SIZE{1024};
 
+template<class SpiType>
+requires SpiImpl<SpiType, IOMode::NonBlocking, TransferMode::RxTx>
 class HelloDmaRtosTask : public PicoTask
 {   
-    SpiDma<SpiMode::RxTx> m_spi;
+    // SpiDma<TransferMode::RxTx> m_spi;
+    SpiType& m_spi;
 public:
-    HelloDmaRtosTask(const Config& config)
-        : PicoTask(1, 512, "DMA-test-task"), 
-        m_spi(Spi<IOMode::NonBlocking>::make(spi_default, 
-                               PICO_DEFAULT_SPI_SCK_PIN,
-                               PICO_DEFAULT_SPI_TX_PIN, 
-                               PICO_DEFAULT_SPI_RX_PIN,  
-                               Dma{DMA_CH0}, 
-                               Dma{DMA_CH1}, 
-                               config))
+    HelloDmaRtosTask(SpiType& spi)
+        : PicoTask(1, 512, "DMA-test-task"), m_spi(spi)
     {
+
         m_spi.enable_loop_back(true);
         irqs.bind_interrupt(&m_spi.dma_tx()); 
     }
@@ -200,8 +197,15 @@ int main()
 
     auto config = Config::create_default();
     config.baudrate = 1000 * 1000;
+    auto spi    = Spi<IOMode::NonBlocking, TransferMode::RxTx>::make(spi_default, 
+                               PICO_DEFAULT_SPI_SCK_PIN,
+                               PICO_DEFAULT_SPI_TX_PIN, 
+                               PICO_DEFAULT_SPI_RX_PIN,  
+                               Dma{DMA_CH0}, 
+                               Dma{DMA_CH1}, 
+                               config);
 
-    static HelloDmaRtosTask dma_task{config};
+    static HelloDmaRtosTask dma_task{spi};
 
     constexpr uint32_t stats_ms{20'000};
     static StatsTask stats{stats_ms};

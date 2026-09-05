@@ -16,6 +16,7 @@ enum class TransferMode
 {
     Tx,
     Rx,
+    RxTx
 };
 
 enum class IOMode

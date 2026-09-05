@@ -92,6 +92,7 @@ public:
         v? hw_set_bits(&spi_get_hw(m_spi)->cr1, SPI_SSPCR1_LBM_BITS)
         : hw_clear_bits(&spi_get_hw(m_spi)->cr1, SPI_SSPCR1_LBM_BITS);
     }
+    
     void set_config(const spi::Config& config)
     {
         spi_set_baudrate(m_spi, config.baudrate);
