@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-Kernel")
+set(VOICE_ANALYZER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/voice_analyzer")
+
 set(FREERTOS_CPP_PATH "${CMAKE_CURRENT_SOURCE_DIR}//FreeRTOS-Cpp/FreeRTOS-Cpp")
 set(RP2350_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mcus/rp2350")
 set(UNIX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mcus/unix")
@@ -67,19 +69,37 @@ endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/embedded_hal)
 
 
+
 #------------------------------------------------------------#
 #                   Add implementations                      #
 #------------------------------------------------------------#
-
+add_library(cmsis_target INTERFACE)
 if(PLATFORM STREQUAL "MCU1")
+
     add_subdirectory(mcus/mcu1)
+
 elseif(PLATFORM STREQUAL "RP2350")
+    add_subdirectory(mcus/rp2350/cmsis_target)
+    target_link_libraries(cmsis_target INTERFACE cmsis_rp2350)
     add_subdirectory(${RP2350_DIR})
 elseif(PLATFORM STREQUAL "UNIX")
     add_subdirectory(${UNIX_DIR})
 endif()
+
+#------------------------------------------------------------#
+#     Fetch CMSIS-DSP                                        #
+#------------------------------------------------------------#
+include(CMSIS-DSP/CMSIS-DSP.cmake)
+
+
+#------------------------------------------------------------#
+#     FreeRTOS-Cpp                                           #
+#------------------------------------------------------------#
 add_subdirectory(${FREERTOS_CPP_PATH})
 
- 
+ #------------------------------------------------------------#
+#     VOICE_ANALYZER_PATH                                                #
+#------------------------------------------------------------#
+add_subdirectory(${VOICE_ANALYZER_PATH})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

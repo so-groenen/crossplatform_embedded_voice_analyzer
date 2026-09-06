@@ -2,13 +2,22 @@
 #define TINY_DSP_HPP
 
 #include "arm_math.h"
-#include "types.hpp"
 #include <cassert>
 #include <span>
+#include <stdint.h>
 
-namespace tiny_dsp 
+namespace voice_analyzer
+{
+    using u16 = uint16_t;
+    using u32 = uint32_t;
+    using i32 = int32_t;
+    using f32 = float;
+
+namespace tiny_dsp
 {
 
+
+    
 class RealFFT
 {
     arm_rfft_fast_instance_f32 m_inst{};
@@ -72,7 +81,7 @@ public:
     }
     
 };
+} // tiny_dsp
 
-
-}
+} // voice_analyzer
 #endif 

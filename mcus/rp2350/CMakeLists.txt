@@ -19,21 +19,21 @@ target_include_directories(rp2350_rtos_config INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-set(CMSISCORE "${PICO_SDK_PATH}/src/rp2_common/cmsis/stub/CMSIS/Core" CACHE PATH "CMSIS Core Path")
+# set(CMSISCORE "${PICO_SDK_PATH}/src/rp2_common/cmsis/stub/CMSIS/Core" CACHE PATH "CMSIS Core Path")
 
-include(FetchContent)
-if(NOT TARGET CMSISDSP)
-    FetchContent_Declare(
-        cmsis_dsp
-        GIT_REPOSITORY https://github.com/ARM-software/CMSIS-DSP.git
-        GIT_TAG        v1.17.1
-        GIT_SHALLOW    TRUE
-    )
-    FetchContent_MakeAvailable(cmsis_dsp)
-endif()
+# include(FetchContent)
+# if(NOT TARGET CMSISDSP)
+#     FetchContent_Declare(
+#         cmsis_dsp
+#         GIT_REPOSITORY https://github.com/ARM-software/CMSIS-DSP.git
+#         GIT_TAG        v1.17.1
+#         GIT_SHALLOW    TRUE
+#     )
+#     FetchContent_MakeAvailable(cmsis_dsp)
+# endif()
 
-# Disable float16 functions to avoid compile issues with older compilers and keep build lightweight
-set(DISABLEFLOAT16 ON CACHE BOOL "Disable float16 kernels in CMSIS-DSP")
+# # Disable float16 functions to avoid compile issues with older compilers and keep build lightweight
+# set(DISABLEFLOAT16 ON CACHE BOOL "Disable float16 kernels in CMSIS-DSP")
 
 target_link_libraries(rp2350_rtos_config INTERFACE 
     pico_stdlib
@@ -48,7 +48,8 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     FreeRTOS-Cpp
     hardware_spi 
     hardware_dma
-    CMSISDSP
+    # CMSISDSP
+    voice_analyzer 
 )
 pico_generate_pio_header(rp2350_rtos_config ${CMAKE_CURRENT_LIST_DIR}/src/drivers/i2s.pio)
 

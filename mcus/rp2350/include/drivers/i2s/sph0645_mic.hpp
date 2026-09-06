@@ -6,10 +6,29 @@
 #include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/pio.hpp"
 #include "types.hpp"
+#include <concepts>
+#include "voice_analyzer.hpp"
+
+// template<typename T>
+// concept IsI2sMic = requires(T t, std::span<u32>& buff)
+// {
+//     {t.start()}             -> std::same_as<void>;
+//     {t.stop()}              -> std::same_as<void>;
+//     {t.read_blocking(buff)} -> std::same_as<void>;
+//     {t.get_sample_rate()}   -> std::same_as<u32>;
+// };
+
+
+template<typename T>
+concept IsI2s = requires(T t)
+{
+    {t.get_sample_rate()} -> std::same_as<u32>;
+};
+
 
 
 template<pio::IsPioProgram P>
-requires pio::IsPioReceiver<P>
+requires pio::IsPioReceiver<P> && IsI2s<P>
 class SPH0645Mic
 {
     Dma m_dma;
@@ -17,6 +36,18 @@ class SPH0645Mic
     size_t m_processed_buff{};
     std::span<u32> m_ping_pong[2];
     bool& m_ready_flag;
+
+    void setup_rx_mode() //requires (M == TransferMode::Rx)
+    {
+        m_dma.read_from_memory(false);
+        m_dma.write_to_memory(true);
+        m_dma.set_transfer_size<u32>();
+        m_dma.set_data_request(m_i2s.get_dreq(false));
+        m_dma.config_transfer(
+            /*dest:*/ m_ping_pong[0].data(),
+            /*src:*/  m_i2s.get_rx_fifo_reg(),
+            /*len:*/  m_ping_pong[0].size());
+    }
 public:
     SPH0645Mic(P& pio_i2s,
             std::span<u32> ping, 
@@ -29,40 +60,14 @@ public:
         m_ping_pong[0] = ping;
         m_ping_pong[1] = pong;
 
-        // if constexpr (M == TransferMode::Rx)
-        // {
-            setup_rx_mode();
-        // }
-        // if constexpr (M == TransferMode::Tx)
-        // {
-            // setup_tx_mode();
-        // }
-        // irq.bind_interrupt(&m_dma);
+        setup_rx_mode();
         m_dma.enable_channel(true);
     }
- 
-    void setup_rx_mode() //requires (M == TransferMode::Rx)
+    u32 get_sample_rate() const
     {
-        m_dma.read_from_memory(false);
-        m_dma.write_to_memory(true);
-        m_dma.set_transfer_size<u32>();
-        m_dma.set_data_request(m_i2s.get_dreq(false));
-        m_dma.config_transfer(
-            /*dest:*/ m_ping_pong[0].data(),
-            /*src:*/  m_i2s.get_rx_fifo_reg(),
-            /*len:*/  m_ping_pong[0].size());
+        return m_i2s.get_sample_rate();
     }
-    // void setup_tx_mode() requires (M == TransferMode::Tx)
-    // {
-    //     m_dma.read_from_memory(true);
-    //     m_dma.write_to_memory(false);
-    //     m_dma.set_transfer_size<T>();
-    //     m_dma.set_data_request(m_i2s.get_dreq(true));
-    //     m_dma.config_transfer(
-    //         /*dest:*/ m_i2s.get_tx_fifo_reg(),
-    //         /*src:*/  m_ping_pong[0].data(), 
-    //                   m_ping_pong[0].size());
-    // }
+
     void start()
     {
         m_i2s.start();
@@ -73,17 +78,7 @@ public:
         m_i2s.stop();
         m_dma.abort();
     }
-    // inline void read_blocking(std::span<T>& rx_buffer, bool& is_ready) requires (M == TransferMode::Rx)
-    // {
-    //     while(!is_ready)
-    //     {
-    //         tight_loop_contents();
-    //     }
-    //     m_processed_buff ^= 1; 
-    //     m_dma.set_write_addr(m_ping_pong[m_processed_buff].data(), true);
-    //     is_ready  = false;
-    //     rx_buffer = m_ping_pong[m_processed_buff ^ 1];
-    // }
+    
     inline void read_blocking(std::span<u32>& rx_buffer)// requires (M == TransferMode::Rx)
     {
         while(!m_ready_flag)
@@ -107,19 +102,9 @@ public:
         rx_buffer = m_ping_pong[m_processed_buff ^ 1];
         return true;
     }
-
-    // inline auto write_blocking(bool& is_ready) requires (M == TransferMode::Tx)
-    // {
-    //     while(!is_ready)
-    //     {
-    //         tight_loop_contents();
-    //     }
-    //     m_processed_buff ^= 1; 
-    //     m_dma.set_read_addr(m_ping_pong[m_processed_buff].data(), true);
-    //     is_ready = false;
-    //     return m_ping_pong[m_processed_buff ^ 1];
-    // }
+ 
 };
 
+// assert(1);
 
 #endif

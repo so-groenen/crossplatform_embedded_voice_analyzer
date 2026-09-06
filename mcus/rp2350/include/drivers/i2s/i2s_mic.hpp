@@ -15,14 +15,19 @@ struct PioI2sConfig
 };
 
   
-class PioI2sMicrophone : public pio::PioBaseProgram
+class PioI2sProgram : public pio::PioBaseProgram
 {
+    u32 sample_rate{};
 public:
-    explicit PioI2sMicrophone(const PioI2sConfig& config)  
-        : PioBaseProgram(pio0, &i2s_pio_program)
+    explicit PioI2sProgram(const PioI2sConfig& config)  
+        : PioBaseProgram(pio0, &i2s_pio_program), sample_rate(config.sample_rate)
     {
         assert(config.ws_pin == config.sck_pin +1);
         i2s_pio_program_init(m_pio_inst, m_pio_sm, m_offset, config.sample_rate, config.data_pin, config.sck_pin);
+    }
+    u32 get_sample_rate() const
+    {
+        return sample_rate;
     }
 };
 

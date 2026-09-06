@@ -7,7 +7,7 @@ from matplotlib.animation import FuncAnimation
 from scipy.interpolate import interp1d
 
 # Configuration
-PORT        = "/dev/ttyACM0"
+PORT        = "/dev/ttyACM1"
 BAUDRATE    = 921_600
 SAMPLE_RATE = 20_000
 FFT_SIZE    = 1024  # Works dynamically for 1024, 2048, 4096, etc.
