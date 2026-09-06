@@ -3,12 +3,11 @@
 #include "FreeRTOS/Task.hpp"
 #include "drivers/input.hpp"
 #include "drivers/pico_task.hpp"
-#include "drivers/interface_irq_handler.hpp"
+#include "interrupts/interface_irq_handler.hpp"
 
 
- 
- 
-class IAsyncInputHandler  : public irq::IIrqHandler 
+  
+class IAsyncInputHandler  : public interrupts::IIrqHandler 
 {
     public:
         virtual ~IAsyncInputHandler() = default;

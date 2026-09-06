@@ -2,7 +2,7 @@
 #define UART_PICO_HPP
 
 #include "drivers/dma.hpp"
-#include "drivers/interface_irq_handler.hpp"
+#include "interrupts/interface_irq_handler.hpp"
 #include "embedded_hal/heapless.hpp"
 #include "types.hpp"
 #include <cstddef>

@@ -18,34 +18,37 @@
 #include <span>
 #include <stddef.h>
 
-#include "drivers/interface_async_dma_handler.hpp"
+#include "interrupts/interface_dma_handlers.hpp"
 #include "hardware/spi.h"
 #include "drivers/pico_task.hpp"
 #include "drivers/dma.hpp"
 #include "types.hpp"
 #include "drivers/spi.hpp"
 
-namespace hardware::spi {
- 
+namespace hardware::spi 
+{
+
+    using namespace interrupts;
+
 template<TransferMode M>
 class SpiRtos : public SpiDma<M>
 {
     PicoTask& m_task;
 public:
-    SpiRtos(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const spi::Config& config) requires (M == TransferMode::RxTx)
+    SpiRtos(spi_inst_t* spi, Dma dma_tx, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const spi::Config& config) requires (M == TransferMode::RxTx)
         : SpiDma<TransferMode::RxTx>(spi, std::move(dma_tx), std::move(dma_rx), config), m_task{*task}
     {
         irq.bind_interrupt_from_rtos(&this->dma_tx(), task);
         irq.bind_interrupt_from_rtos(&this->dma_rx(), task);
     }
 
-    SpiRtos(spi_inst_t* spi, Dma dma_tx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const spi::Config& config)  requires (M == TransferMode::Tx)
+    SpiRtos(spi_inst_t* spi, Dma dma_tx, PicoTask* task, IAsyncDmaHandler& irq, const spi::Config& config)  requires (M == TransferMode::Tx)
         : SpiDma<TransferMode::Tx>(spi, std::move(dma_tx), config), m_task{*task}
     {
         irq.bind_interrupt_from_rtos(&this->dma_tx(), task);
     }
 
-    SpiRtos(spi_inst_t* spi, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const spi::Config& config)  requires (M == TransferMode::Rx)
+    SpiRtos(spi_inst_t* spi, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const spi::Config& config)  requires (M == TransferMode::Rx)
         : SpiDma<TransferMode::Rx>(spi, std::move(dma_rx), config), m_task{*task}
     {
         irq.bind_interrupt_from_rtos(&this->dma_rx(), task);
@@ -85,7 +88,7 @@ inline constexpr bool is_spi_implementation<T, IOMode::Rtos, M> = std::same_as<T
 // {
 // public:
  
-//     static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::RxTx> 
+//     static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::RxTx> 
 //     {
 //         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
 //         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
@@ -94,14 +97,14 @@ inline constexpr bool is_spi_implementation<T, IOMode::Rtos, M> = std::same_as<T
 //     }   
 
  
-//     static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Tx> 
+//     static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Tx> 
 //     {
 //         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
 //         gpio_set_function(mosi_pin, GPIO_FUNC_SPI);
 //         return SpiRtos<TransferMode::Tx>{inst, std::move(dma_tx), task, irq, config};
 //     }   
  
-//     static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Rx> 
+//     static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Rx> 
 //     {
 //         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
 //         gpio_set_function(miso_pin, GPIO_FUNC_SPI);
@@ -114,7 +117,7 @@ class Spi<IOMode::Rtos, M>
 {
 public:
  
-    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::RxTx> 
+    static auto make(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, u32 miso_pin, Dma dma_tx, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::RxTx> 
         requires(M == TransferMode::RxTx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
@@ -124,7 +127,7 @@ public:
     }   
 
  
-    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Tx> 
+    static auto make_tx_only(spi_inst_t* inst, u32 sck_pin,  u32 mosi_pin, Dma dma_tx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Tx> 
             requires(M == TransferMode::Tx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);
@@ -132,7 +135,7 @@ public:
         return SpiRtos<TransferMode::Tx>{inst, std::move(dma_tx), task, irq, config};
     }   
  
-    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, PicoTask* task, ::irq::IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Rx> 
+    static auto make_rx_only(spi_inst_t* inst, u32 sck_pin, u32 miso_pin, Dma dma_rx, PicoTask* task, IAsyncDmaHandler& irq, const Config& config) -> SpiRtos<TransferMode::Rx> 
             requires(M == TransferMode::Rx)
     {
         gpio_set_function(sck_pin,  GPIO_FUNC_SPI);

@@ -25,7 +25,7 @@
 #include "drivers/async_input.hpp"
 #include "embedded_hal/traits.hpp"
 #include "projdefs.h"
-#include "drivers/async_input_handler.hpp"
+#include "interrupts/async_input_handler.hpp"
 #include "stats.hpp"
 #include "thread_safe_ctx.hpp"
  

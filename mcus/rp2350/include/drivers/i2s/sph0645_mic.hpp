@@ -2,9 +2,9 @@
 #define I2S_PICO_HPP
 
 
-#include "drivers/async_dma_handler.hpp"
+#include "interrupts/async_dma_handlers.hpp"
 #include "drivers/dma.hpp"
-#include "drivers/interface_async_dma_handler.hpp"
+// #include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/pico_task.hpp"
 #include "drivers/pio.hpp"
 #include "types.hpp"
@@ -101,7 +101,7 @@ public:
             std::span<u32> ping, 
             std::span<u32> pong,
             Dma dma,
-            DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
+            interrupts::DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
         : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
             m_ready_flag{irq.bind_driver(this)}
     {
@@ -133,7 +133,7 @@ public:
             std::span<u32> pong,
             Dma dma,
             PicoTask* task,
-            irq::AsyncDmaHandlerCallback<IRQ_n, N_Channels, SPH0645MicAsync<P>>& irq)
+            interrupts::AsyncDmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645MicAsync<P>>& irq)
         : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
             m_task{task}
     {

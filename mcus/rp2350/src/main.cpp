@@ -10,7 +10,6 @@
 // #include "arm_math_types.h"
 #include "FreeRTOS/Kernel.hpp"
 #include "drivers/gpio.hpp"
-#include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/pico_task.hpp"
 #include "drivers/uart.hpp"
 #include <pico/stdio.h>
@@ -28,7 +27,7 @@
 #include "drivers/countdown_timer.hpp"
 #include "drivers/dma.hpp"
 #include "voice_analyzer.hpp"
-#include "drivers/async_dma_handler.hpp"
+#include "interrupts/async_dma_handlers.hpp"
 #include "pico/multicore.h"
 #include "types.hpp"
 #include "drivers/i2s/i2s_mic.hpp"
@@ -36,18 +35,21 @@
 
 
  
- 
+using interrupts::IAsyncDmaHandler;
+using interrupts::AsyncDmaHandler;
+using interrupts::AsyncDmaHandlerWithCallback;
+
+
 constexpr size_t num_channels = 1;
  
 
 using I2sMicrophoneAsync = SPH0645MicAsync<PioI2sProgram>;
-using I2sIrqHandler      = irq::AsyncDmaHandlerCallback<DMA_IRQ_0, num_channels, I2sMicrophoneAsync>;
-
-
-// bind interrupt handler class to interrupt service routine.
+using I2sIrqHandler      = AsyncDmaHandlerWithCallback<DMA_IRQ_0, num_channels, I2sMicrophoneAsync>;
 BIND_INTERRUPT(irqs, I2sIrqHandler, i2s_handler);
  
-using UartIrqHandler = irq::AsyncDmaHandler<DMA_IRQ_1, num_channels>;
+
+
+using UartIrqHandler = AsyncDmaHandler<DMA_IRQ_1, num_channels>;
 BIND_INTERRUPT(irq_uart, UartIrqHandler, uart_handler);
 
 
@@ -194,7 +196,7 @@ class AsyncWriter : public UartNonBlocking<TransferMode::Tx>
 {
     PicoTask* m_task{};
 public:
-    explicit AsyncWriter(Dma dma, PicoTask* task, irq::IAsyncDmaHandler& irqs)
+    explicit AsyncWriter(Dma dma, PicoTask* task, IAsyncDmaHandler& irqs)
      : UartNonBlocking<TransferMode::Tx>(std::move(dma)), m_task(task)
     {
         irqs.bind_interrupt_from_rtos(&this->dma_tx(), m_task);

@@ -36,12 +36,14 @@
 #include "drivers/pico_task.hpp"
 #include "drivers/async_input.hpp"
 #include "projdefs.h"
-#include "drivers/async_input_handler.hpp"
+#include "interrupts/async_input_handler.hpp"
 #include "stats.hpp" 
 #include <array>
 #include "drivers/dma.hpp"
 #include "drivers/spi.hpp"
-#include "drivers/async_dma_handler.hpp"
+#include "interrupts/async_dma_handlers.hpp"
+#include "interrupts/dma_handlers.hpp"
+
 #include "types.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
@@ -55,11 +57,11 @@ constexpr size_t N_CHANNELS = 1;
 // base: Do not record / block / unblock tasks 
 
 
-class DmaIrqTest : public DmaHandlerBase<DMA_IRQ_0, N_CHANNELS>
+class DmaIrqTest : public interrupts::DmaHandler<DMA_IRQ_0, N_CHANNELS>
 {
 public:
     DmaIrqTest(irq_handler_t handler)
-       : DmaHandlerBase<DMA_IRQ_0, N_CHANNELS>(handler)
+       : interrupts::DmaHandler<DMA_IRQ_0, N_CHANNELS>(handler)
     {
     }
     inline void handle_inst(size_t n) override 

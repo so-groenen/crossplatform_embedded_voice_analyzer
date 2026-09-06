@@ -3,7 +3,7 @@
 #include <hardware/gpio.h>
 #include <pico/platform/common.h>
 #include "drivers/input.hpp"
-#include "drivers/interface_async_input_handler.hpp"
+#include "interrupts/interface_async_input_handler.hpp"
 #include "drivers/pico_task.hpp"
 #include "embedded_hal/traits.hpp"
 

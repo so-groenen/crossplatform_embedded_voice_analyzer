@@ -24,11 +24,11 @@
 #include "drivers/countdown_timer.hpp"
 #include "drivers/dma.hpp"
 #include "voice_analyzer.hpp"
-#include "drivers/async_dma_handler.hpp"
 #include "pico/multicore.h"
 #include "types.hpp"
 #include "drivers/i2s/i2s_mic.hpp"
 #include "drivers/i2s/sph0645_mic.hpp"
+#include "interrupts/async_dma_handlers.hpp"
 
 
  
@@ -37,7 +37,7 @@ constexpr size_t N_channel = 1;
  
 
 using I2sMicrophone = SPH0645Mic<PioI2sProgram>;
-using I2sIrqHandler = DmaHandlerWithCallback<DMA_IRQ_0, N_channel, I2sMicrophone>;
+using I2sIrqHandler = interrupts::DmaHandlerWithCallback<DMA_IRQ_0, N_channel, I2sMicrophone>;
 
 
 // bind interrupt handler class to interrupt service routine.

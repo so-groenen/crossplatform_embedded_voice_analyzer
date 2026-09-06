@@ -27,6 +27,7 @@
 #include "FreeRTOS/Mutex.hpp"
 #include "counter_task.hpp"
 
+#include "interrupts/async_dma_handlers.hpp"
 #include "drivers/gpio.hpp"
 #include "drivers/spi.hpp"
 #include "embedded_hal/traits.hpp"
@@ -37,8 +38,8 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi_async.hpp"
-#include "drivers/async_dma_handler.hpp"
-#include "drivers/async_input_handler.hpp"
+#include "interrupts/async_dma_handlers.hpp"
+#include "interrupts/async_input_handler.hpp"
 #include "drivers/async_input.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
@@ -58,7 +59,9 @@ constexpr size_t num_buttons  = 1;
 // use it to register N_channel = 1 interrupt from DMA channel
 // and also register the corresponding task to block / unblock it!
 
-bind_interrupt_DMA_0(rtos, irqs, my_handler, N_CHANNELS);
+using MyAsyncHandler = interrupts::AsyncDmaHandler<DMA_IRQ_0, N_CHANNELS>;
+BIND_INTERRUPT(irqs, MyAsyncHandler, my_isr_handler);
+
 
  
  
@@ -86,7 +89,7 @@ using embedded_hal::tests::output::BlinkyApp;
 using embedded_hal::tests::async::AsyncTransferApp;
 
 
-using spi::rtos::SpiAsyncFull;
+using spi::SpiAsyncFull;
 
 
 

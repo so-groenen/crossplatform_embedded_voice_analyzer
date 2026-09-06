@@ -19,7 +19,7 @@
 #include <span>
 #include <stddef.h>
 
-#include "drivers/interface_async_dma_handler.hpp"
+#include "interrupts/interface_dma_handlers.hpp"
 #include "embedded_hal/traits.hpp"
 #include "hardware/spi.h"
 #include "hardware/dma.h"
