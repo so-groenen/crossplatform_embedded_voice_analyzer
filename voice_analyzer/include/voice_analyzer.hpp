@@ -16,7 +16,7 @@ concept IsI2sMic = requires(T t, std::span<u32>& buff)
     {t.get_sample_rate()}   -> std::same_as<u32>;
 };
 
-
+#define VOICE_ANALYZER_I2S_ASSERT(X) static_assert(voice_analyzer::IsI2sMic<X>,"Voice analyzer - I2S must implement: start(), stop(), read_blocking(spanU32), U32 get_sample_rate().");
 
 template<size_t FFT_N>
 struct VoiceAnalyzerConfig
@@ -90,14 +90,23 @@ public:
     {
         m_i2s.start(); 
     }
-    inline auto get_raw_mag_view() -> std::span<const f32, FFT_N/2>
+    inline auto get_raw_mag() -> std::array<f32, FFT_N/2>&
     {
         return m_mags;
     }
-    inline auto get_raw_samples_view() -> std::span<const f32, FFT_N>
+    inline auto get_raw_samples() -> std::array<f32, FFT_N>&
     {
         return m_float_samples;
     }
+    inline auto get_raw_mag_view() -> std::span<f32>
+    {
+        return m_mags;
+    }
+    inline auto get_raw_samples_view() -> std::span<f32>
+    {
+        return m_float_samples;
+    }
+
     inline auto get_magnitudes_view() -> std::span<const f32>
     {
         // compute_magnitudes(squared);

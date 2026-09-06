@@ -37,15 +37,16 @@ target_include_directories(rp2350_rtos_config INTERFACE
 
 target_link_libraries(rp2350_rtos_config INTERFACE 
     pico_stdlib
+    pico_multicore
     pico_runtime
     pico_stdio_usb
     hardware_pio
     # pico_cyw43_arch_lwip_threadsafe_background
-    pico_cyw43_arch_lwip_sys_freertos
-    # pico_cyw43_arch_lwip_poll
-    FreeRTOS-Kernel-Heap4
+    # pico_cyw43_arch_lwip_sys_freertos
+    pico_cyw43_arch_none
+    # FreeRTOS-Kernel-Heap4
     embedded_hal
-    FreeRTOS-Cpp
+    # FreeRTOS-Cpp
     hardware_spi 
     hardware_dma
     # CMSISDSP

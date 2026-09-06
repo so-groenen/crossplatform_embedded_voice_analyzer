@@ -50,13 +50,11 @@
 using embedded_hal::heapless::Vector;
 
 
- 
- 
 
 template<irq_num_rp2350 IRQ_n, size_t N_Channels>
 class DmaHandlerBase: public irq::IDmaHandler
 {
-public:
+protected:
     irq_handler_t m_handler{};
     Vector<uint, N_Channels> m_dma_channels{};
     Vector<bool, N_Channels> m_ready_flags{};
@@ -83,6 +81,7 @@ public:
             dma_hw->ints1 = (1u << m_dma_channels[n]);
         }
     }
+public:
     explicit DmaHandlerBase(irq_handler_t handler)
         : m_handler(handler)//, m_irqn(irqn)
     {
@@ -92,15 +91,7 @@ public:
     {
         size_t n = m_dma_channels.size();
         m_dma_channels.push_back(dma->channel());
-        // if constexpr (IRQ_n == DMA_IRQ_0)
-        // {
-        //     dma->enable_channel(true, 1);
-        // }
-        // else  
-        // {
-        //     dma->enable_channel(true, 0);
-        // }
-        // Register our callback function to the CPU vector table for DMA_IRQ_0 etc...
+
         static bool bound = false;
         if(m_handler && !bound)
         {
@@ -128,6 +119,48 @@ public:
     }
 };
  
+template<typename T>
+concept HasDmaIsrCallback = requires(T t)
+{
+    {t.callback_from_isr()} -> std::same_as<void>;
+    {t.get_dma_ptr()}               -> std::same_as<Dma*>;
+};
+ 
+#define _DMA_ISR_CALLBACK
+#define _DMA_ISR_CALLBACK_ASSERT(X) static_assert(HasDmaIsrCallback<X>, "must implement callback_from_isr() & get_dma_ptr()");
+
+template<irq_num_rp2350 IRQ_n, size_t N_Channels, typename Driver>
+requires HasDmaIsrCallback<Driver>
+class DmaHandlerWithCallback: public DmaHandlerBase<IRQ_n, N_Channels>
+{
+    Vector<Driver*, N_Channels> m_inst{};
+public:    
+    explicit DmaHandlerWithCallback(irq_handler_t handler)
+        : DmaHandlerBase<IRQ_n, N_Channels>(handler)//, m_irqn(irqn)
+    {
+    }
+    inline bool& bind_driver(Driver* inst)
+    {
+        m_inst.push_back(inst);
+        return this->bind_interrupt(inst->get_dma_ptr());
+    }   
+    inline void handle_inst(size_t n) override 
+    {
+        m_inst[n]->callback_from_isr();
+    }
+    void handle_isr() override
+    {   
+        for(size_t n = 0; n < this->m_dma_channels.size(); n++)
+        {
+            if(this->is_event(n))
+            {
+                this->m_ready_flags[n] = true;
+                this->acknowledge_isr(n);
+                handle_inst(n);
+            }
+        }
+    }
+};
 
 
 namespace irq 
@@ -164,6 +197,32 @@ public:
                 FreeRTOS::Kernel::yield();
         }
     }
+    inline void handle_task(size_t n) 
+    {
+        // if(this->m_tasks[n])
+        // {
+        //     #ifdef DEBUG
+        //     printf(" >>> Hello from RTOS DMA Handler!\n");
+        //     #endif 
+        //     bool xHigherPriorityTaskWoken{};
+        //     this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
+        //     if(xHigherPriorityTaskWoken)
+        //         FreeRTOS::Kernel::yield();
+        // }
+    }
+    void handle_isr() override
+    {   
+        for(size_t n = 0; n < this->m_dma_channels.size(); n++)
+        {
+            if(this->is_event(n))
+            {
+                this->m_ready_flags[n] = true;
+                this->acknowledge_isr(n);
+                handle_task(n);
+                handle_inst(n);
+            }
+        }
+    }
 };
 
 
@@ -189,10 +248,18 @@ public:
 
 }
 
-#define bind_interrupt_DMA_0(irqs, handler_name, n_channels)                             \
+#define bind_interrupt_DMA_0(irqs, handler_name, n_channels)                                \
     void handler_name();                                                                    \
     [[maybe_unused]] static irq::AsyncDmaHandler<DMA_IRQ_0, n_channels> irqs{handler_name}; \
     void handler_name() {                                                                   \
+        irqs.handle_isr();                                                                  \
+    }                                                                                       
+
+
+#define BIND_INTERRUPT(irqs, irq_class, handler_name)     \
+    void handler_name();                                  \
+    [[maybe_unused]] static irq_class irqs{handler_name}; \
+    void handler_name() {                                 \
         irqs.handle_isr();                                                                  \
     }                                                                                       
 
