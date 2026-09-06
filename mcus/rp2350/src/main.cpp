@@ -8,7 +8,9 @@
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
 // #include "arm_math_types.h"
+#include "FreeRTOS/Kernel.hpp"
 #include "drivers/gpio.hpp"
+#include "drivers/pico_task.hpp"
 #include "drivers/uart.hpp"
 #include <pico/stdio.h>
 #include <pico/time.h>
@@ -20,6 +22,7 @@
 #include "drivers/dma.hpp"
 
 #include "embedded_hal/traits.hpp"
+#include "projdefs.h"
 #include "stats.hpp"
 #include "drivers/countdown_timer.hpp"
 #include "drivers/dma.hpp"
@@ -36,8 +39,8 @@
 constexpr size_t N_channel = 1;
  
 
-using I2sMicrophone = SPH0645Mic<PioI2sProgram>;
-using I2sIrqHandler = DmaHandlerWithCallback<DMA_IRQ_0, N_channel, I2sMicrophone>;
+using I2sMicrophoneAsync = SPH0645MicAsync<PioI2sProgram>;
+using I2sIrqHandler      = irq::AsyncDmaHandlerCallback<DMA_IRQ_0, N_channel, I2sMicrophoneAsync>;
 
 
 // bind interrupt handler class to interrupt service routine.
@@ -138,19 +141,100 @@ void core1_entry()
     }
 }
 
+#include <FreeRTOS/Queue.hpp>
+
+static FreeRTOS::Queue<std::span<f32>> s_queue{4};
+
+
+template<size_t FFT_N>
+class VoiceTask : public PicoTask
+{
+    I2sMicrophoneAsync m_i2s;
+    VoiceAnalyzer<FFT_N, I2sMicrophoneAsync> m_analyzer;
+public:
+    VoiceTask(const PioI2sConfig& i2s_config, const VoiceAnalyzerConfig<FFT_SIZE>& dsp_config)
+     :  PicoTask(tskIDLE_PRIORITY +1, 2 * FFT_SIZE, "VoiceTask"),
+     m_i2s{PioI2sProgram{i2s_config}, PING, PONG, Dma{}, this, irqs}
+      ,m_analyzer{m_i2s, dsp_config}
+    {
+        m_analyzer.init();
+    }
+    void taskFunction() override
+    {
+        constexpr u16 task0_led_pin = 14;
+        pico2_w::Output led{task0_led_pin};
+
+
+        CountdownTimer<1> task{};
+        task.add_task_ms(250);
+
+        const auto raw_samples = m_analyzer.get_raw_samples_view();
+        const auto raw_mags    = m_analyzer.get_raw_mag_view();
+
+        m_analyzer.start();
+        while(true)
+        {
+            if(task.is_ready())
+                led.toggle();
+        
+            m_analyzer.compute_magnitudes(); // await notifs! & fires interrupt to unblock
+            s_queue.sendToBack(raw_samples);
+            s_queue.sendToBack(raw_mags);
+        }
+    }
+};
+
+
+class SenderTask : public PicoTask
+{
+    UartNonBlocking<TransferMode::Tx>& m_uart;
+    Packet_t<f32, FFT_SIZE> audio_packet;
+    Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+
+public:
+    SenderTask(UartNonBlocking<TransferMode::Tx>& uart)
+     : PicoTask(tskIDLE_PRIORITY +1, 2*FFT_SIZE, "SenderTask"), m_uart{uart}
+    {
+        audio_packet.header     = {0xAA, 0xBB};
+        magnitude_packet.header = {0xCC, 0xDD};
+    }
+    void taskFunction() override
+    {
+        constexpr u16 task1_pin = 15;
+        pico2_w::Output led{task1_pin};
+
+        CountdownTimer<1> tasks{};
+        tasks.add_task_ms(250);
+        
+
+        while(true)
+        {
+            if(tasks.is_ready())
+                led.toggle();
+            
+            auto raw_samples = s_queue.receive(portMAX_DELAY);
+            
+            audio_packet.copy_sample(raw_samples.value());
+            m_uart.write_dma(&audio_packet, sizeof(audio_packet));
+             
+            auto raw_mags    = s_queue.receive(portMAX_DELAY);
+            
+            magnitude_packet.copy_sample(raw_mags.value());
+            m_uart.dma_tx().await_blocking();
+            m_uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+        }
+    }
+};
+
+ 
 
 
 int main() 
 {
     stdio_init_all();
-    sleep_ms(25);
-    multicore_reset_core1();
-    sleep_ms(25);
+     
 
-    constexpr u16 CORE0_LED_PIN = 14;
-    pico2_w::Output led_core0{CORE0_LED_PIN};
-
-    constexpr PioI2sConfig config
+    constexpr PioI2sConfig i2s_config
     {
         .sample_rate = SAMPLE_RATE, // Word Select frequency: 
         .sck_pin     = 16,          // sck is 32 bit for left and 32bit for right, therefor serial clock is 64 * 16k
@@ -158,51 +242,28 @@ int main()
         .data_pin    = 18,          // bit sampled at serial clock rate, but only process left (Word Select low)
     };
      
-    I2sMicrophone i2s{
-        PioI2sProgram{config},
-        PING,
-        PONG,
-        Dma{DMA_CH0},
-        irqs};
-
-    VOICE_ANALYZER_I2S_ASSERT(I2sMicrophone);
+    VOICE_ANALYZER_I2S_ASSERT(I2sMicrophoneAsync);
  
-    VoiceAnalyzerConfig<FFT_SIZE> analyzer_config = 
+    constexpr VoiceAnalyzerConfig<FFT_SIZE> analyzer_config = 
     {
         .min_freq        = 50,
         .max_freq        = 1000,
         .noise_threshold = 0.0f
     };
+    
 
-    static VoiceAnalyzer analyzer{i2s, analyzer_config};
-    if(!analyzer.init())
-        error_led(led_core0);
+    constexpr u32 baudrate = 921'600;     
+    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
+    uart.set_baudrate(baudrate);
 
- 
-    CountdownTimer<1> timer{};
-    timer.add_task_ms(250);
-    // timer.add_task_ms(250);
-
-    constexpr size_t led_task  = 0;   
-    multicore_launch_core1(core1_entry);
-
-    analyzer.start();
+    static VoiceTask<FFT_SIZE> voice_task{i2s_config, analyzer_config};
+    static SenderTask sender_task{uart};
+    // static FakeSenderTask fake{};
+    // static StatsTask stats{};
+    FreeRTOS::Kernel::startScheduler();
     while (true) 
     {
-        if(timer.is_ready(led_task))
-            led_core0.toggle();
         
-        // static constexpr bool use_quad_interpol = true;
-        // float peak = analyzer.get_peak<use_quad_interpol>();
-        // if(timer.is_ready(peak_task))
-        //     printf("Peak: %f \n", peak);
-        analyzer.compute_magnitudes();
-
-        auto raw_samples_ptr = reinterpret_cast<uintptr_t>(analyzer.get_raw_samples().data());
-        auto raw_mag_ptr     = reinterpret_cast<uintptr_t>(analyzer.get_raw_mag().data());
-
-        multicore_fifo_push_blocking(raw_samples_ptr);
-        multicore_fifo_push_blocking(raw_mag_ptr);
     }
 }
 

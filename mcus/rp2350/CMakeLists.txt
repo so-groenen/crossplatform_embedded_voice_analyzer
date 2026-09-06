@@ -43,7 +43,7 @@ target_link_libraries(rp2350_rtos_config INTERFACE
     hardware_pio
     # pico_cyw43_arch_lwip_threadsafe_background
     # pico_cyw43_arch_lwip_sys_freertos
-    pico_cyw43_arch_none
+    # pico_cyw43_arch_none
     # FreeRTOS-Kernel-Heap4
     embedded_hal
     # FreeRTOS-Cpp
@@ -68,7 +68,7 @@ option(BUILD_TESTS "Build the example test targets" ON)
 #------------------------------------------------------------#
 #    Setup pico & add config interface to examples & main    #
 #------------------------------------------------------------#
-function(configure_picor_rtos_target TARGET_NAME)
+function(configure_pico_target TARGET_NAME)
     target_link_libraries(${TARGET_NAME} PRIVATE rp2350_rtos_config)
     pico_enable_stdio_usb(${TARGET_NAME} 0)
     pico_enable_stdio_uart(${TARGET_NAME} 1)
@@ -76,6 +76,26 @@ function(configure_picor_rtos_target TARGET_NAME)
     target_compile_definitions(${TARGET_NAME} PRIVATE DEBUG)
 endfunction()
 
+#------------------------------------------------------------#
+#             freeRTOS libs & deps config function           #
+#------------------------------------------------------------#
+
+function(configure_rtos TARGET_NAME)
+    target_link_libraries(${TARGET_NAME} PRIVATE 
+        pico_cyw43_arch_lwip_sys_freertos
+        FreeRTOS-Kernel-Heap4
+        FreeRTOS-Cpp
+        # voice_analyzer 
+    )
+endfunction()
+
+#------------------------------------------------------------#
+#               Bare metal config func                       #
+#------------------------------------------------------------#
+
+function(configure_bare_metal TARGET_NAME)
+    target_link_libraries(${TARGET_NAME} PRIVATE pico_cyw43_arch_none)
+endfunction()
 
 
 #-------------#
@@ -94,8 +114,13 @@ if(BUILD_MAIN)
         src/main.cpp
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(rp2350_main)
+    configure_pico_target(rp2350_main)
+    configure_rtos(rp2350_main)
 endif()
+
+
+
+
 
 #-------------#
 #    Tests    #
@@ -106,41 +131,55 @@ if(BUILD_TESTS)
         src/tests/output_test.cpp
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_output)
+    configure_pico_target(test_output)
+    configure_rtos(test_output)
 
     
     add_executable(test_exti 
         src/tests/exti_test.cpp 
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_exti)
+    configure_pico_target(test_exti)
+    configure_rtos(test_exti)
 
 
     add_executable(test_raw_dma  
         src/tests/raw_spi_dma_test.cpp 
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_raw_dma)
+    configure_pico_target(test_raw_dma)
+    configure_rtos(test_raw_dma)
+
 
     add_executable(test_rtos_spi  
         src/tests/rtos_spi_test.cpp 
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_rtos_spi)
+    configure_pico_target(test_rtos_spi)
+    configure_rtos(test_rtos_spi)
+
 
     add_executable(test_embedded_hal
         src/tests/embedded_hal_test.cpp 
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_embedded_hal)
+    configure_pico_target(test_embedded_hal)
+    configure_rtos(test_raw_dma)
+
 
     add_executable(test_uart
         src/tests/uart_dma_test.cpp 
         ${DRIVER_SRC}
     )
-    configure_picor_rtos_target(test_uart)
+    configure_pico_target(test_uart)
 
 
+    add_executable(bare_metal_voice
+        src/bare_metal_voice.cpp 
+        ${DRIVER_SRC}
+    )
+    configure_pico_target(bare_metal_voice)
+    configure_bare_metal(bare_metal_voice)
 
 endif()
  

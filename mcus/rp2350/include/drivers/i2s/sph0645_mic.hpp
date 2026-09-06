@@ -5,19 +5,11 @@
 #include "drivers/async_dma_handler.hpp"
 #include "drivers/dma.hpp"
 #include "drivers/interface_async_dma_handler.hpp"
+#include "drivers/pico_task.hpp"
 #include "drivers/pio.hpp"
 #include "types.hpp"
 #include <concepts>
 #include "voice_analyzer.hpp"
-
-// template<typename T>
-// concept IsI2sMic = requires(T t, std::span<u32>& buff)
-// {
-//     {t.start()}             -> std::same_as<void>;
-//     {t.stop()}              -> std::same_as<void>;
-//     {t.read_blocking(buff)} -> std::same_as<void>;
-//     {t.get_sample_rate()}   -> std::same_as<u32>;
-// };
 
 
 template<typename T>
@@ -27,17 +19,15 @@ concept IsI2s = requires(T t)
 };
 
 
-
 template<pio::IsPioProgram P>
 requires pio::IsPioReceiver<P> && IsI2s<P>
-class SPH0645Mic
+class AbstractI2sDriver
 {
+protected:
     Dma m_dma;
     P m_i2s;
-    // P& m_i2s;
     size_t m_current_buff{};
     std::span<u32> m_ping_pong[2];
-    bool& m_ready_flag;
 
     void setup_rx_mode() //requires (M == TransferMode::Rx)
     {
@@ -51,35 +41,17 @@ class SPH0645Mic
             /*len:*/  m_ping_pong[0].size());
     }
 public:
-    // SPH0645Mic(P& pio_i2s,
-    //         std::span<u32> ping, 
-    //         std::span<u32> pong,
-    //         Dma dma,
-    //         irq::IDmaHandler& irq)
-    //     : m_i2s(pio_i2s), m_dma{std::move(dma)}, m_ready_flag{irq.bind_interrupt(&m_dma)}
-    // {
-    //     assert(ping.size() == pong.size());
-    //     m_ping_pong[0] = ping;
-    //     m_ping_pong[1] = pong;
-
-    //     setup_rx_mode();
-    //     m_dma.enable_channel(true);
-    // }
-
-    template<irq_num_rp2350 IRQ_n, size_t N_Channels>
-    SPH0645Mic(P pio_i2s,
+    AbstractI2sDriver(P pio_i2s,
             std::span<u32> ping, 
             std::span<u32> pong,
-            Dma dma,
-            DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
-        : m_i2s(std::move(pio_i2s)), m_dma{std::move(dma)}, m_ready_flag{irq.bind_driver(this)}
+            Dma dma)
+        : m_i2s(std::move(pio_i2s)), m_dma{std::move(dma)}
     {
         assert(ping.size() == pong.size());
         m_ping_pong[0] = ping;
         m_ping_pong[1] = pong;
 
         setup_rx_mode();
-        m_dma.enable_channel(true);
     }
 
     u32 get_sample_rate() const
@@ -87,7 +59,6 @@ public:
         return m_i2s.get_sample_rate();
     }
 
-    // Methods needed for DmaHandler
     _DMA_ISR_CALLBACK void callback_from_isr()
     {
         m_current_buff ^= 1; 
@@ -97,7 +68,9 @@ public:
     {
         return &m_dma;
     }
-
+ 
+    virtual void read_blocking(std::span<u32>& rx_buffer) = 0;
+ 
     void start()
     {
         m_i2s.start();
@@ -113,29 +86,79 @@ public:
         m_current_buff ^= 1; 
         m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
     }
-    inline void read_blocking(std::span<u32>& rx_buffer)// requires (M == TransferMode::Rx)
+};
+
+
+
+template<pio::IsPioProgram P>
+requires pio::IsPioReceiver<P> && IsI2s<P>
+class SPH0645Mic : public AbstractI2sDriver<P>
+{
+    bool& m_ready_flag;
+public:
+    template<irq_num_rp2350 IRQ_n, size_t N_Channels>
+    SPH0645Mic(P pio_i2s,
+            std::span<u32> ping, 
+            std::span<u32> pong,
+            Dma dma,
+            DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
+        : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
+            m_ready_flag{irq.bind_driver(this)}
+    {
+        this->m_dma.enable_channel(true);
+    }
+    inline void read_blocking(std::span<u32>& rx_buffer) override
     {
         while(!m_ready_flag)
         {
             tight_loop_contents();
         }
         m_ready_flag = false;
-
-        // change_buffer();
-        rx_buffer = m_ping_pong[m_current_buff ^ 1];
+        rx_buffer = this->m_ping_pong[this->m_current_buff ^ 1];
     }
-    inline bool try_read(std::span<u32>& rx_buffer)// requires (M == TransferMode::Rx)
-    {
-        if(!m_ready_flag)
-            return false;
-
-        m_current_buff ^= 1; 
-        m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
-        m_ready_flag  = false;
-        rx_buffer = m_ping_pong[m_current_buff ^ 1];
-        return true;
-    }
+ 
 };
+
+
+template<pio::IsPioProgram P>
+requires pio::IsPioReceiver<P> && IsI2s<P>
+class SPH0645MicAsync : public AbstractI2sDriver<P>
+{
+    // bool& m_ready_flag;
+    PicoTask* m_task{};
+public:
+    template<irq_num_rp2350 IRQ_n, size_t N_Channels>
+    SPH0645MicAsync(P pio_i2s,
+            std::span<u32> ping, 
+            std::span<u32> pong,
+            Dma dma,
+            PicoTask* task,
+            irq::AsyncDmaHandlerCallback<IRQ_n, N_Channels, SPH0645MicAsync<P>>& irq)
+        : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
+            m_task{task}
+    {
+        irq.bind_rtos_driver(this);
+        this->m_dma.enable_channel(true);
+    }
+
+    _DMA_ISR_RTOS_CALLBACK auto get_task() -> PicoTask*
+    {
+        return m_task;
+    }
+
+    _DMA_ISR_RTOS_CALLBACK  inline void read_blocking(std::span<u32>& rx_buffer) override
+    {
+        // while(!m_ready_flag)
+        // {
+        //     tight_loop_contents();
+        // }
+        m_task->awaitNotifs();
+        // m_ready_flag = false;
+        rx_buffer = this->m_ping_pong[this->m_current_buff ^ 1];
+    }
+ 
+};
+
 
 #include "drivers/i2s/i2s_mic.hpp"
 _DMA_ISR_CALLBACK_ASSERT(SPH0645Mic<PioI2sProgram>)

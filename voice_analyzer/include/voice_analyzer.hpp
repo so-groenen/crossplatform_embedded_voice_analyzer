@@ -66,7 +66,7 @@ class VoiceAnalyzer
     //         m_dsp.compute_magnitude(m_fft_res, m_mags); 
     // }
 public:
-    VoiceAnalyzer(I2sDriver& i2s, VoiceAnalyzerConfig<FFT_N>& config)
+    VoiceAnalyzer(I2sDriver& i2s, const VoiceAnalyzerConfig<FFT_N>& config)
       : m_i2s{i2s}, 
         bin_resolution{i2s.get_sample_rate()/(float)FFT_N}, 
         k_min{config.min_freq/(u32)bin_resolution},  
