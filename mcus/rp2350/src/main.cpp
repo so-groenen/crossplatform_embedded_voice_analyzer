@@ -10,6 +10,7 @@
 // #include "arm_math_types.h"
 #include "FreeRTOS/Kernel.hpp"
 #include "drivers/gpio.hpp"
+#include "drivers/interface_async_dma_handler.hpp"
 #include "drivers/pico_task.hpp"
 #include "drivers/uart.hpp"
 #include <pico/stdio.h>
@@ -36,17 +37,21 @@
 
  
  
-constexpr size_t N_channel = 1;
+constexpr size_t num_channels = 1;
  
 
 using I2sMicrophoneAsync = SPH0645MicAsync<PioI2sProgram>;
-using I2sIrqHandler      = irq::AsyncDmaHandlerCallback<DMA_IRQ_0, N_channel, I2sMicrophoneAsync>;
+using I2sIrqHandler      = irq::AsyncDmaHandlerCallback<DMA_IRQ_0, num_channels, I2sMicrophoneAsync>;
 
 
 // bind interrupt handler class to interrupt service routine.
 BIND_INTERRUPT(irqs, I2sIrqHandler, i2s_handler);
  
- 
+using UartIrqHandler = irq::AsyncDmaHandler<DMA_IRQ_1, num_channels>;
+BIND_INTERRUPT(irq_uart, UartIrqHandler, uart_handler);
+
+
+
 constexpr size_t FFT_SIZE   = 1024;
 constexpr size_t BUFF_SIZE  = 2*FFT_SIZE;    // LEFT + RIGHT Channel, we only keep one left in the end
 constexpr u32 SAMPLE_RATE   = 20'000;
@@ -96,50 +101,50 @@ using voice_analyzer::VoiceAnalyzerConfig;
 using voice_analyzer::VoiceAnalyzer;
 
 
-void core1_entry() 
-{
+// void core1_entry() 
+// {
 
-    // constexpr u32 baudrate = 250'000;     
-    constexpr u32 baudrate = 921'600;     
-    // 
-    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{DMA_CH1});
-    uart.set_baudrate(baudrate);
+//     // constexpr u32 baudrate = 250'000;     
+//     constexpr u32 baudrate = 921'600;     
+//     // 
+//     auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{DMA_CH1});
+//     uart.set_baudrate(baudrate);
 
 
-    Packet_t<f32, FFT_SIZE> audio_packet;
-    Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    audio_packet.header     = {0xAA, 0xBB};
-    magnitude_packet.header = {0xCC, 0xDD};
+//     Packet_t<f32, FFT_SIZE> audio_packet;
+//     Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+//     audio_packet.header     = {0xAA, 0xBB};
+//     magnitude_packet.header = {0xCC, 0xDD};
 
-    constexpr u16 LED_PIN = 15;
-    pico2_w::Output led_core1{LED_PIN};
+//     constexpr u16 LED_PIN = 15;
+//     pico2_w::Output led_core1{LED_PIN};
 
-    CountdownTimer<1> tasks{};
-    tasks.add_task_ms(250);
+//     CountdownTimer<1> tasks{};
+//     tasks.add_task_ms(250);
  
-    constexpr size_t led_task  = 0;
+//     constexpr size_t led_task  = 0;
     
-    while (true)
-    {
-        if(tasks.is_ready(led_task))
-            led_core1.toggle();
+//     while (true)
+//     {
+//         if(tasks.is_ready(led_task))
+//             led_core1.toggle();
 
-        // u32 ok = multicore_fifo_pop_blocking();
-        u32 raw_samples = multicore_fifo_pop_blocking();
-        auto raw_samples_ptr = reinterpret_cast<const f32*>(raw_samples);
+//         // u32 ok = multicore_fifo_pop_blocking();
+//         u32 raw_samples = multicore_fifo_pop_blocking();
+//         auto raw_samples_ptr = reinterpret_cast<const f32*>(raw_samples);
         
-        u32 raw_mags = multicore_fifo_pop_blocking();
-        auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
+//         u32 raw_mags = multicore_fifo_pop_blocking();
+//         auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
 
 
-        audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
-        magnitude_packet.copy_sample(std::span{raw_mags_ptr, FFT_SIZE/2});
+//         audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
+//         magnitude_packet.copy_sample(std::span{raw_mags_ptr, FFT_SIZE/2});
          
-        uart.write_dma(&audio_packet, sizeof(audio_packet));
-        uart.dma_tx().await_blocking();
-        uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
-    }
-}
+//         uart.write_dma(&audio_packet, sizeof(audio_packet));
+//         uart.dma_tx().await_blocking();
+//         uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+//     }
+// }
 
 #include <FreeRTOS/Queue.hpp>
 
@@ -153,7 +158,7 @@ class VoiceTask : public PicoTask
     VoiceAnalyzer<FFT_N, I2sMicrophoneAsync> m_analyzer;
 public:
     VoiceTask(const PioI2sConfig& i2s_config, const VoiceAnalyzerConfig<FFT_SIZE>& dsp_config)
-     :  PicoTask(tskIDLE_PRIORITY +1, 2 * FFT_SIZE, "VoiceTask"),
+     :  PicoTask(tskIDLE_PRIORITY + 2, 2 * FFT_SIZE, "VoiceTask"),
      m_i2s{PioI2sProgram{i2s_config}, PING, PONG, Dma{}, this, irqs}
       ,m_analyzer{m_i2s, dsp_config}
     {
@@ -185,16 +190,40 @@ public:
 };
 
 
+class AsyncWriter : public UartNonBlocking<TransferMode::Tx>
+{
+    PicoTask* m_task{};
+public:
+    explicit AsyncWriter(Dma dma, PicoTask* task, irq::IAsyncDmaHandler& irqs)
+     : UartNonBlocking<TransferMode::Tx>(std::move(dma)), m_task(task)
+    {
+        irqs.bind_interrupt_from_rtos(&this->dma_tx(), m_task);
+    }
+    inline void write_async(const volatile void* read_addr, size_t transfer_count)
+    {
+        this->m_dma_tx->enable_channel(true);
+        this->write_dma(read_addr, transfer_count);
+        m_task->awaitNotifs();
+        this->m_dma_tx->enable_channel(false);
+    }
+};
+
+constexpr u32 baudrate = 921'600;     
+
+
 class SenderTask : public PicoTask
 {
-    UartNonBlocking<TransferMode::Tx>& m_uart;
+    // UartNonBlocking<TransferMode::Tx>& m_uart;
     Packet_t<f32, FFT_SIZE> audio_packet;
     Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-
+    AsyncWriter m_writer;
 public:
     SenderTask(UartNonBlocking<TransferMode::Tx>& uart)
-     : PicoTask(tskIDLE_PRIORITY +1, 2*FFT_SIZE, "SenderTask"), m_uart{uart}
+     : PicoTask(tskIDLE_PRIORITY +1, 2*FFT_SIZE, "SenderTask"), // m_uart{uart}, 
+     m_writer{Dma{}, this, irq_uart}
     {
+        m_writer.set_baudrate(baudrate);
+
         audio_packet.header     = {0xAA, 0xBB};
         magnitude_packet.header = {0xCC, 0xDD};
     }
@@ -213,15 +242,16 @@ public:
                 led.toggle();
             
             auto raw_samples = s_queue.receive(portMAX_DELAY);
-            
-            audio_packet.copy_sample(raw_samples.value());
-            m_uart.write_dma(&audio_packet, sizeof(audio_packet));
-             
             auto raw_mags    = s_queue.receive(portMAX_DELAY);
-            
+
+            audio_packet.copy_sample(raw_samples.value());
             magnitude_packet.copy_sample(raw_mags.value());
-            m_uart.dma_tx().await_blocking();
-            m_uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+
+            m_writer.write_async(&audio_packet, sizeof(audio_packet));
+            m_writer.write_async(&magnitude_packet, sizeof(magnitude_packet));
+            
+            // m_uart.dma_tx().await_blocking();
+            // m_uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
         }
     }
 };
@@ -252,7 +282,6 @@ int main()
     };
     
 
-    constexpr u32 baudrate = 921'600;     
     auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
     uart.set_baudrate(baudrate);
 

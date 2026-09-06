@@ -93,6 +93,8 @@ public:
         if(!m_dma_channels.push_back(dma->channel()))
             panic("Bind interrupt: m_dma_channels overflow\n");
 
+        dma->set_irq(IRQ_n);
+
         static bool bound = false;
         if(m_handler && !bound)
         {

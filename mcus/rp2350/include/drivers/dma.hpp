@@ -27,7 +27,7 @@ class Dma
 protected:
     uint m_dma; 
     dma_channel_config m_config{};
-    // uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
+    uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
     static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
 public:
     explicit Dma(uint channel)
@@ -41,7 +41,10 @@ public:
     {
         set_transfer_size<uint8_t>();
     }
-    
+    void set_irq(irq_num_rp2350 dma_irqn)
+    {
+        m_irqn_index = dma_irqn - DMA_IRQ_0; // if it is DMA_IRQ_2 we get 12 - 10 = 2;
+    }
     Dma(const Dma& other) = delete;
     Dma& operator=(Dma& other) = delete;
 
@@ -208,9 +211,9 @@ public:
     }
 
     // interrupt handling:
-    void enable_channel(bool value, uint irqn_index = 0)
+    void enable_channel(bool value)
     {
-        dma_irqn_set_channel_enabled(irqn_index, m_dma, value);
+        dma_irqn_set_channel_enabled(m_irqn_index, m_dma, value);
     }
     // default is zero, and IRQ1 is rarely used.
 
