@@ -1,6 +1,6 @@
 # Main:
-TARGET         := rp2350_main
-# TARGET         := bare_metal_voice
+# TARGET         := rp2350_main
+TARGET         := bare_metal_voice
 
 # Examples:
 # TARGET         := test_exti

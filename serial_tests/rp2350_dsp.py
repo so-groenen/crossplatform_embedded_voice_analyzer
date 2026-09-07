@@ -110,7 +110,7 @@ ax_time.grid(True, linestyle="--", alpha=0.6)
     label="Quadratic Interp",
 )
 
-ax_freq.set_title(f"Frequency Domain ({MIN_FREQ} Hz – {MAX_FREQ} Hz)")
+ax_freq.set_title(f"Frequency Domain ({MIN_FREQ} Hz - {MAX_FREQ} Hz)")
 ax_freq.set_xlabel("Frequency (Hz)")
 ax_freq.set_ylabel("Magnitude")
 ax_freq.set_xlim(MIN_FREQ, MAX_FREQ)

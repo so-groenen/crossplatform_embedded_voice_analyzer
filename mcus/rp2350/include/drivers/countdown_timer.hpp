@@ -32,9 +32,11 @@ public:
     inline bool is_ready(size_t n = 0)
     {
         absolute_time_t now = get_absolute_time();
-        if (absolute_time_diff_us(now, m_next[n]) <= 0) 
+        i64 diff = absolute_time_diff_us(now, m_next[n]);
+        if (diff <= 0) 
         {
-            m_next[n] = delayed_by_us(now, m_delays[n]);
+            u64 diff_error = (static_cast<u64>(-diff) > m_delays[n]) ? m_delays[n] :  static_cast<u64>(-diff);
+            m_next[n]      = delayed_by_us(now, m_delays[n] - diff_error);
             return true;
         }
         return false;

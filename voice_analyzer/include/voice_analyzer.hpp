@@ -21,7 +21,6 @@ concept IsI2sMic = requires(T t, std::span<u32>& buff)
 template<size_t FFT_N>
 struct VoiceAnalyzerConfig
 {
-    // u32 sample_rate = 20'000;
     u32 min_freq          = 50; 
     u32 max_freq          = 1000;
     float noise_threshold = 1.0f;

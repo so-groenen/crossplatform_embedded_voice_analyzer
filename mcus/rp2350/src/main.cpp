@@ -1,6 +1,7 @@
 
 
 #include <array>
+#include <cstddef>
 #include <cstdio>
 #include <hardware/irq.h>
 #include <hardware/regs/intctrl.h>
@@ -9,6 +10,8 @@
 #include <pico/platform/panic.h>
 // #include "arm_math_types.h"
 #include "FreeRTOS/Kernel.hpp"
+#include "FreeRTOS/Task.hpp"
+#include "interrupts/async_dma_handlers.hpp"
 #include "drivers/gpio.hpp"
 #include "drivers/pico_task.hpp"
 #include "drivers/uart.hpp"
@@ -18,10 +21,12 @@
 #include <span>
 #include <stddef.h>
 #include <string.h>
+#include <sys/cdefs.h>
 
 #include "drivers/dma.hpp"
 
 #include "embedded_hal/traits.hpp"
+#include "interrupts/dma_handlers.hpp"
 #include "projdefs.h"
 #include "stats.hpp"
 #include "drivers/countdown_timer.hpp"
@@ -34,11 +39,40 @@
 #include "drivers/i2s/sph0645_mic.hpp"
 
 
- 
+
+
+class IRepeatingTimer
+{
+    struct repeating_timer m_timer;
+    i32 m_delay_ms;
+public:
+    IRepeatingTimer(i32 delay_ms)
+     : m_delay_ms{delay_ms}
+    {
+    }
+    void start()
+    {
+        add_repeating_timer_ms(m_delay_ms, IRepeatingTimer::runner, reinterpret_cast<void*>(this), &m_timer);
+    }
+    virtual bool timer_callback() = 0;
+    bool cancel()
+    {
+        return cancel_repeating_timer(&m_timer);
+    }
+    ~IRepeatingTimer() = default;
+private:
+    static bool runner(repeating_timer* timer_ptr)
+    {
+        auto inst = reinterpret_cast<IRepeatingTimer*>(timer_ptr->user_data);
+        return inst->timer_callback();
+    }
+};
+
+
 using interrupts::IAsyncDmaHandler;
 using interrupts::AsyncDmaHandler;
 using interrupts::AsyncDmaHandlerWithCallback;
-
+using interrupts::DmaHandlerWithCallback;
 
 constexpr size_t num_channels = 1;
  
@@ -49,8 +83,9 @@ BIND_INTERRUPT(irqs, I2sIrqHandler, i2s_handler);
  
 
 
-using UartIrqHandler = AsyncDmaHandler<DMA_IRQ_1, num_channels>;
-BIND_INTERRUPT(irq_uart, UartIrqHandler, uart_handler);
+// using UartIrqHandler = AsyncDmaHandler<DMA_IRQ_1, num_channels>;
+// BIND_INTERRUPT(irq_uart, UartIrqHandler, uart_handler);
+
 
 
 
@@ -102,51 +137,23 @@ using namespace hardware::uart;
 using voice_analyzer::VoiceAnalyzerConfig;
 using voice_analyzer::VoiceAnalyzer;
 
-
-// void core1_entry() 
-// {
-
-//     // constexpr u32 baudrate = 250'000;     
-//     constexpr u32 baudrate = 921'600;     
-//     // 
-//     auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{DMA_CH1});
-//     uart.set_baudrate(baudrate);
-
-
-//     Packet_t<f32, FFT_SIZE> audio_packet;
-//     Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-//     audio_packet.header     = {0xAA, 0xBB};
-//     magnitude_packet.header = {0xCC, 0xDD};
-
-//     constexpr u16 LED_PIN = 15;
-//     pico2_w::Output led_core1{LED_PIN};
-
-//     CountdownTimer<1> tasks{};
-//     tasks.add_task_ms(250);
  
-//     constexpr size_t led_task  = 0;
-    
-//     while (true)
-//     {
-//         if(tasks.is_ready(led_task))
-//             led_core1.toggle();
-
-//         // u32 ok = multicore_fifo_pop_blocking();
-//         u32 raw_samples = multicore_fifo_pop_blocking();
-//         auto raw_samples_ptr = reinterpret_cast<const f32*>(raw_samples);
-        
-//         u32 raw_mags = multicore_fifo_pop_blocking();
-//         auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
 
 
-//         audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
-//         magnitude_packet.copy_sample(std::span{raw_mags_ptr, FFT_SIZE/2});
-         
-//         uart.write_dma(&audio_packet, sizeof(audio_packet));
-//         uart.dma_tx().await_blocking();
-//         uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
-//     }
-// }
+class LedTimer : public IRepeatingTimer
+{
+    pico2_w::Output led{};
+public:
+    LedTimer(u16 led_pin, i32 delay_ms)
+     : IRepeatingTimer(delay_ms), led{led_pin}
+    {}
+    bool timer_callback() override
+    {
+        led.toggle();
+        return true;
+    }
+};
+
 
 #include <FreeRTOS/Queue.hpp>
 
@@ -192,23 +199,64 @@ public:
 };
 
 
-class AsyncWriter : public UartNonBlocking<TransferMode::Tx>
+// class AsyncWriter : public UartNonBlocking<TransferMode::Tx>
+// {
+//     PicoTask* m_task{};
+// public:
+//     explicit AsyncWriter(Dma dma, PicoTask* task, IAsyncDmaHandler& irqs)
+//      : UartNonBlocking<TransferMode::Tx>(std::move(dma)), m_task(task)
+//     {
+//         irqs.bind_interrupt_from_rtos(&this->dma_tx(), m_task);
+//     }
+//     inline void write_async(const volatile void* read_addr, size_t transfer_count)
+//     {
+//         this->m_dma_tx->enable_channel(true);
+//         this->write_dma(read_addr, transfer_count);
+//         m_task->awaitNotifs();
+//         this->m_dma_tx->enable_channel(false);
+//     }
+// };
+
+
+
+class UartCallbackWriter : public UartNonBlocking<TransferMode::Tx>
 {
-    PicoTask* m_task{};
+    bool m_trans_allowed{};
+    std::span<const u8> m_data{};
 public:
-    explicit AsyncWriter(Dma dma, PicoTask* task, IAsyncDmaHandler& irqs)
-     : UartNonBlocking<TransferMode::Tx>(std::move(dma)), m_task(task)
+    template<size_t N>
+    explicit UartCallbackWriter(Dma dma, DmaHandlerWithCallback<DMA_IRQ_1, N, UartCallbackWriter>& irqs)
+     : UartNonBlocking<TransferMode::Tx>(std::move(dma), uart0)
     {
-        irqs.bind_interrupt_from_rtos(&this->dma_tx(), m_task);
+        irqs.bind_driver(this);
+        this->dma_tx().enable_channel(true);
     }
-    inline void write_async(const volatile void* read_addr, size_t transfer_count)
+
+    void enable_transfer_from_isr()
     {
-        this->m_dma_tx->enable_channel(true);
-        this->write_dma(read_addr, transfer_count);
-        m_task->awaitNotifs();
-        this->m_dma_tx->enable_channel(false);
+        m_trans_allowed = true;
     }
+    void set_isr_transfer_data(const void* addr, size_t bytes)
+    {
+        m_data = std::span<const u8>{reinterpret_cast<const u8*>(addr), bytes};
+    }
+    _DMA_ISR_CALLBACK void callback_from_isr()
+    {
+        if(!m_trans_allowed)
+            return;
+
+        this->write_dma(m_data);
+        m_trans_allowed = false;
+    }
+    _DMA_ISR_CALLBACK  Dma* get_dma_ptr()
+    {
+        return &this->dma_tx();
+    } 
 };
+
+
+using UartIrqHandler      =  interrupts::DmaHandlerWithCallback<DMA_IRQ_1, 1, UartCallbackWriter>;
+BIND_INTERRUPT(irqs_uart, UartIrqHandler, uart_handler);
 
 constexpr u32 baudrate = 921'600;     
 
@@ -218,11 +266,13 @@ class SenderTask : public PicoTask
     // UartNonBlocking<TransferMode::Tx>& m_uart;
     Packet_t<f32, FFT_SIZE> audio_packet;
     Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    AsyncWriter m_writer;
+    // AsyncWriter m_writer;
+    UartCallbackWriter m_writer;
 public:
     SenderTask(UartNonBlocking<TransferMode::Tx>& uart)
      : PicoTask(tskIDLE_PRIORITY +1, 2*FFT_SIZE, "SenderTask"), // m_uart{uart}, 
-     m_writer{Dma{}, this, irq_uart}
+    //  m_writer{Dma{}, this, irq_uart},
+     m_writer{Dma{}, irqs_uart} // uses default uart0
     {
         m_writer.set_baudrate(baudrate);
 
@@ -236,7 +286,7 @@ public:
 
         CountdownTimer<1> tasks{};
         tasks.add_task_ms(250);
-        
+        m_writer.set_isr_transfer_data(&magnitude_packet, sizeof(magnitude_packet)); 
 
         while(true)
         {
@@ -249,23 +299,47 @@ public:
             audio_packet.copy_sample(raw_samples.value());
             magnitude_packet.copy_sample(raw_mags.value());
 
-            m_writer.write_async(&audio_packet, sizeof(audio_packet));
-            m_writer.write_async(&magnitude_packet, sizeof(magnitude_packet));
+            m_writer.write_dma(&audio_packet, sizeof(audio_packet));
+            m_writer.enable_transfer_from_isr();   // will automatically transfer magnitude_packet from ISR after first finishes. It is single shot, so needs to be renabled.
             
-            // m_uart.dma_tx().await_blocking();
-            // m_uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
         }
     }
 };
 
  
+    bool callback_func(__unused repeating_timer_t* t)
+    {
+        static pico2_w::Output led{15};
+        led.toggle();
+        printf("hello \n");
+        return true;
+    }
+ 
+class TimerTask : FreeRTOS::Task
+{
+    LedTimer led_timer{14, 250};
+public:
+    TimerTask()
+     : FreeRTOS::Task(1, 128, "my task")
+    {
 
-
+    }
+    void taskFunction() override
+    {
+        led_timer.start();
+        while(true)
+        {
+        }
+    }
+};
+// bool repeating_timer_callback(struct repeating_timer *t) {
+//     printf("Tick\n");
+//     return true; 
+// }
 int main() 
 {
     stdio_init_all();
      
-
     constexpr PioI2sConfig i2s_config
     {
         .sample_rate = SAMPLE_RATE, // Word Select frequency: 
@@ -291,10 +365,13 @@ int main()
     static SenderTask sender_task{uart};
     // static FakeSenderTask fake{};
     // static StatsTask stats{};
+
+    // LedTimer timer{1000};
+    // TimerTask timer_task{};
     FreeRTOS::Kernel::startScheduler();
     while (true) 
     {
-        
+        tight_loop_contents();
     }
 }
 

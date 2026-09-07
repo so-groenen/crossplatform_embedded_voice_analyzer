@@ -2,7 +2,10 @@
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <hardware/dma.h>
 #include <hardware/irq.h>
+#include <hardware/regs/dreq.h>
 #include <hardware/regs/intctrl.h>
 // #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
@@ -15,6 +18,7 @@
 #include <pico/types.h>
 #include <span>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "drivers/dma.hpp"
@@ -92,19 +96,19 @@ using namespace hardware::uart;
 using voice_analyzer::VoiceAnalyzerConfig;
 using voice_analyzer::VoiceAnalyzer;
 
-
+ 
 void core1_entry() 
 {
 
     // constexpr u32 baudrate = 250'000;     
     constexpr u32 baudrate = 921'600;     
     // 
-    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{DMA_CH1});
+    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
     uart.set_baudrate(baudrate);
 
 
-    Packet_t<f32, FFT_SIZE> audio_packet;
-    Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+    static Packet_t<f32, FFT_SIZE> audio_packet;
+    static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
     audio_packet.header     = {0xAA, 0xBB};
     magnitude_packet.header = {0xCC, 0xDD};
 
@@ -116,29 +120,29 @@ void core1_entry()
  
     constexpr size_t led_task  = 0;
     
+ 
     while (true)
     {
         if(tasks.is_ready(led_task))
             led_core1.toggle();
-
-        // u32 ok = multicore_fifo_pop_blocking();
+ 
         u32 raw_samples = multicore_fifo_pop_blocking();
         auto raw_samples_ptr = reinterpret_cast<const f32*>(raw_samples);
         
         u32 raw_mags = multicore_fifo_pop_blocking();
         auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
 
-
-        audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
+ 
         magnitude_packet.copy_sample(std::span{raw_mags_ptr, FFT_SIZE/2});
-         
+        audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
+
         uart.write_dma(&audio_packet, sizeof(audio_packet));
         uart.dma_tx().await_blocking();
         uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
     }
 }
 
-
+ 
 
 int main() 
 {
@@ -162,7 +166,7 @@ int main()
         PioI2sProgram{config},
         PING,
         PONG,
-        Dma{DMA_CH0},
+        Dma{},
         irqs};
 
     VOICE_ANALYZER_I2S_ASSERT(I2sMicrophone);
@@ -181,12 +185,11 @@ int main()
  
     CountdownTimer<1> timer{};
     timer.add_task_ms(250);
-    // timer.add_task_ms(250);
-
+ 
     constexpr size_t led_task  = 0;   
     multicore_launch_core1(core1_entry);
-
-    analyzer.start();
+ 
+    analyzer.start(); 
     while (true) 
     {
         if(timer.is_ready(led_task))

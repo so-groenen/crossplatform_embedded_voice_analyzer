@@ -2,6 +2,7 @@
 #define UART_PICO_HPP
 
 #include "drivers/dma.hpp"
+#include "embedded_hal/traits.hpp"
 #include "interrupts/interface_irq_handler.hpp"
 #include "embedded_hal/heapless.hpp"
 #include "types.hpp"
@@ -235,7 +236,7 @@ public:
         // set_tx();
         // set_rx();
     }
-    inline void write_dma(std::span<u8> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
+    inline void write_dma(std::span<const u8> rx_buff) requires (M == TransferMode::RxTx || M == TransferMode::Tx)
     {
         this->write_to_peripheral(this, rx_buff);
     }
@@ -324,6 +325,12 @@ public:
     }   
 };
 
+
+// // static_assert(embedded_hal::blocking::IsBlockingReadWrite<UartBlocking<TransferMode::RxTx>> && "SpiAsyncFull must implement read & write blocking");
+// static_assert(embedded_hal::async::IsAsyncReadWrite<SpiRtos<TransferMode::RxTx>> && "SpiAsyncFull must implement read & write async");
+// static_assert(embedded_hal::async::IsAsyncRead<SpiRtos<TransferMode::Rx>>  && "SpiAsync must implement read");
+// static_assert(embedded_hal::async::IsAsyncWrite<SpiRtos<TransferMode::Tx>>  && "SpiAsync must implement read");
+  
 
 }
 

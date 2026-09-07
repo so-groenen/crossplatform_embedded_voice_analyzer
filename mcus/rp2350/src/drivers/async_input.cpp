@@ -1,7 +1,7 @@
 #include "drivers/async_input.hpp"
 #include "FreeRTOS/Kernel.hpp"
 #include "FreeRTOS/Task.hpp"
-#include "drivers/async_input_handler.hpp"
+#include "interrupts/async_input_handler.hpp"
 #include "embedded_hal/traits.hpp"
 #include <array>
 #include <cassert>

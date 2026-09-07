@@ -48,6 +48,17 @@ namespace embedded_hal
 
 }// output
 
+namespace i2s 
+{
+    template<typename T>
+    concept IsI2sRx = requires(T t, std::span<uint32_t>& buff)
+    {
+        {t.start()}             -> std::same_as<void>;
+        {t.stop()}              -> std::same_as<void>;
+        {t.read_await(buff)}    -> std::same_as<void>;
+        {t.get_sample_rate()}   -> std::same_as<uint32_t>;
+    };
+}
 
 namespace input 
 {
@@ -99,10 +110,15 @@ namespace blocking
     {
         {g.transfer_blocking(rx_buff, tx_buff)} -> std::same_as<std::expected<void, SpiError>>;
     };
+}
 
-
-
-
+namespace delay 
+{
+    template<class T>
+    concept IsDelay = std::move_constructible<T> && requires (T g, uint32_t ms) 
+    {
+        {g.delay_ms(ms)};
+    };
 }
 
 namespace async 

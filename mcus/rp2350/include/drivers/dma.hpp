@@ -30,6 +30,10 @@ protected:
     uint m_irqn_index{}; // NOT vector index, but if O or 1. Irq_n, can be reset by the handler
     static constexpr uint moved_dma_channel{std::numeric_limits<uint>::max()};
 public:
+    dma_channel_config* cfg()
+    {
+        return &m_config;
+    }
     explicit Dma(uint channel)
         : m_dma{channel}, m_config{dma_channel_get_default_config(m_dma)}//, m_dma_irq{dma_irq}
     {
@@ -80,7 +84,7 @@ public:
                                 &m_config,
                                 write_addr,           // write address
                                 read_addr,  // read address from memory
-                                transfer_count,  // element count (each element is of size transfer_data_size)
+                                dma_encode_transfer_count(transfer_count),  // element count (each element is of size transfer_data_size)
                                 start);     
     }
     template<std::integral T>
@@ -205,7 +209,7 @@ public:
             panic("DMA Infer Sized Not implemented");
         }
     }
-    void await_blocking()
+    inline void await_blocking()
     {
         dma_channel_wait_for_finish_blocking(m_dma);
     }
