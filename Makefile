@@ -1,15 +1,16 @@
 # Main:
-# TARGET         := rp2350_main
-TARGET         := bare_metal_voice
+TARGET         := rp2350_main
+# TARGET 		 := bare_metal_voice
 
 # Examples:
 # TARGET         := test_exti
 # TARGET         := test_output
 # TARGET 	     := test_raw_dma
 # TARGET 		 := test_embedded_hal
-# TARGET 		 := test_rtos_spi
 # TARGET 	     := test_uart
-
+# TARGET 		 := test_rtos_spi
+# TARGET 		 := test_input
+ 
 
 BUILD_DIR      := build
 PRESET		   := pico2-debug

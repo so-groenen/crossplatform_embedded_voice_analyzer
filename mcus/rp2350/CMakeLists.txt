@@ -181,5 +181,13 @@ if(BUILD_TESTS)
     configure_pico_target(bare_metal_voice)
     configure_bare_metal(bare_metal_voice)
 
+    add_executable(test_input
+        src/tests/input_bare_test.cpp 
+        ${DRIVER_SRC}
+    )
+    configure_pico_target(test_input)
+    configure_bare_metal(test_input)
+
+
 endif()
  

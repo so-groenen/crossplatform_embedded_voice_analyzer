@@ -41,32 +41,32 @@
 
 
 
-class IRepeatingTimer
-{
-    struct repeating_timer m_timer;
-    i32 m_delay_ms;
-public:
-    IRepeatingTimer(i32 delay_ms)
-     : m_delay_ms{delay_ms}
-    {
-    }
-    void start()
-    {
-        add_repeating_timer_ms(m_delay_ms, IRepeatingTimer::runner, reinterpret_cast<void*>(this), &m_timer);
-    }
-    virtual bool timer_callback() = 0;
-    bool cancel()
-    {
-        return cancel_repeating_timer(&m_timer);
-    }
-    ~IRepeatingTimer() = default;
-private:
-    static bool runner(repeating_timer* timer_ptr)
-    {
-        auto inst = reinterpret_cast<IRepeatingTimer*>(timer_ptr->user_data);
-        return inst->timer_callback();
-    }
-};
+// class IRepeatingTimer
+// {
+//     struct repeating_timer m_timer;
+//     i32 m_delay_ms;
+// public:
+//     IRepeatingTimer(i32 delay_ms)
+//      : m_delay_ms{delay_ms}
+//     {
+//     }
+//     void start()
+//     {
+//         add_repeating_timer_ms(m_delay_ms, IRepeatingTimer::runner, reinterpret_cast<void*>(this), &m_timer);
+//     }
+//     virtual bool timer_callback() = 0;
+//     bool cancel()
+//     {
+//         return cancel_repeating_timer(&m_timer);
+//     }
+//     ~IRepeatingTimer() = default;
+// private:
+//     static bool runner(repeating_timer* timer_ptr)
+//     {
+//         auto inst = reinterpret_cast<IRepeatingTimer*>(timer_ptr->user_data);
+//         return inst->timer_callback();
+//     }
+// };
 
 
 using interrupts::IAsyncDmaHandler;
@@ -140,19 +140,19 @@ using voice_analyzer::VoiceAnalyzer;
  
 
 
-class LedTimer : public IRepeatingTimer
-{
-    pico2_w::Output led{};
-public:
-    LedTimer(u16 led_pin, i32 delay_ms)
-     : IRepeatingTimer(delay_ms), led{led_pin}
-    {}
-    bool timer_callback() override
-    {
-        led.toggle();
-        return true;
-    }
-};
+// class LedTimer : public IRepeatingTimer
+// {
+//     pico2_w::Output led{};
+// public:
+//     LedTimer(u16 led_pin, i32 delay_ms)
+//      : IRepeatingTimer(delay_ms), led{led_pin}
+//     {}
+//     bool timer_callback() override
+//     {
+//         led.toggle();
+//         return true;
+//     }
+// };
 
 
 #include <FreeRTOS/Queue.hpp>
@@ -240,8 +240,10 @@ public:
     {
         m_data = std::span<const u8>{reinterpret_cast<const u8*>(addr), bytes};
     }
-    _DMA_ISR_CALLBACK void callback_from_isr()
+    _DMA_ISR_CALLBACK void callback_from_isr(uint dma_chan)
     {
+        assert(this->dma_tx().channel() == dma_chan);
+        
         if(!m_trans_allowed)
             return;
 
@@ -307,31 +309,31 @@ public:
 };
 
  
-    bool callback_func(__unused repeating_timer_t* t)
-    {
-        static pico2_w::Output led{15};
-        led.toggle();
-        printf("hello \n");
-        return true;
-    }
+//     bool callback_func(__unused repeating_timer_t* t)
+//     {
+//         static pico2_w::Output led{15};
+//         led.toggle();
+//         printf("hello \n");
+//         return true;
+//     }
  
-class TimerTask : FreeRTOS::Task
-{
-    LedTimer led_timer{14, 250};
-public:
-    TimerTask()
-     : FreeRTOS::Task(1, 128, "my task")
-    {
+// class TimerTask : FreeRTOS::Task
+// {
+//     LedTimer led_timer{14, 250};
+// public:
+//     TimerTask()
+//      : FreeRTOS::Task(1, 128, "my task")
+//     {
 
-    }
-    void taskFunction() override
-    {
-        led_timer.start();
-        while(true)
-        {
-        }
-    }
-};
+//     }
+//     void taskFunction() override
+//     {
+//         led_timer.start();
+//         while(true)
+//         {
+//         }
+//     }
+// };
 // bool repeating_timer_callback(struct repeating_timer *t) {
 //     printf("Tick\n");
 //     return true; 

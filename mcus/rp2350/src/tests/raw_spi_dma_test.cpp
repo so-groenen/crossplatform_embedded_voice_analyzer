@@ -56,12 +56,13 @@ constexpr size_t N_CHANNELS = 1;
 // bind interrupt handler "irqs" to the my_handler Interrupt Service routine, and register a single DMA channel.
 // base: Do not record / block / unblock tasks 
 
+using interrupts::AbstractDmaHandler;
 
-class DmaIrqTest : public interrupts::DmaHandler<DMA_IRQ_0, N_CHANNELS>
+class DmaIrqTest : public AbstractDmaHandler<DMA_IRQ_0, N_CHANNELS>
 {
 public:
     DmaIrqTest(irq_handler_t handler)
-       : interrupts::DmaHandler<DMA_IRQ_0, N_CHANNELS>(handler)
+       : AbstractDmaHandler<DMA_IRQ_0, N_CHANNELS>(handler)
     {
     }
     inline void handle_inst(size_t n) override 
@@ -70,12 +71,13 @@ public:
     }
 };
 
-void my_handler();
-DmaIrqTest irqs{my_handler};
-void my_handler()
-{
-    irqs.handle_isr();
-}
+BIND_INTERRUPT(irqs, DmaIrqTest, my_handler);
+// void my_handler();
+// DmaIrqTest irqs{my_handler};
+// void my_handler()
+// {
+//     irqs.handle_isr();
+// }
 
  
 using namespace hardware::spi;

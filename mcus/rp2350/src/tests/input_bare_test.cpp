@@ -93,9 +93,6 @@ int main()
 
     WifiOutput default_led{Level::Low};
 
-
-
-    
     MyDriver driver(irq, bt1, bt2, led1, led2);    
 
     CountdownTimer<1> tasks{};

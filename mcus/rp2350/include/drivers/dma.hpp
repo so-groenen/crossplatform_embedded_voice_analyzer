@@ -10,7 +10,7 @@
 #include <hardware/sync.h>
 #include <limits>
 #include <optional>
-#include <pico/cyw43_arch.h>
+// #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
 #include <pico/time.h>

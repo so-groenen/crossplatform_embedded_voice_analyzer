@@ -98,35 +98,35 @@ public:
  
  
 template<typename T>
-concept HasDmaIsrCallback = requires(T t)
+concept IsDmaCallback = requires(T t, uint dma_chan)
 {
-    {t.callback_from_isr()} -> std::same_as<void>;
-    {t.get_dma_ptr()}       -> std::same_as<Dma*>;
+    {t.callback_from_isr(dma_chan)} -> std::same_as<void>;
+    {t.get_dma_ptr()}               -> std::same_as<Dma*>;
 };
  
 #define _DMA_ISR_CALLBACK
-#define _DMA_ISR_CALLBACK_ASSERT(X) static_assert(interrupts::HasDmaIsrCallback<X>, "must implement callback_from_isr() & get_dma_ptr()");
+#define _DMA_ISR_CALLBACK_ASSERT(X) static_assert(interrupts::IsDmaCallback<X>, "must implement callback_from_isr() & get_dma_ptr()");
 
 
 
-template<irq_num_rp2350 IRQ_n, size_t N_Channels, typename Driver>
-requires HasDmaIsrCallback<Driver>
+template<irq_num_rp2350 IRQ_n, size_t N_Channels, IsDmaCallback Driver>
 class DmaHandlerWithCallback: public AbstractDmaHandler<IRQ_n, N_Channels>
 {
-    Vector<Driver*, N_Channels> m_inst{};
+    Driver* m_inst{};
 public:    
     explicit DmaHandlerWithCallback(irq_handler_t handler)
         : AbstractDmaHandler<IRQ_n, N_Channels>(handler)//, m_irqn(irqn)
     {
     }
-    inline bool& bind_driver(Driver* inst)
+    inline void bind_driver(Driver* inst)
     {
-        m_inst.push_back(inst);
-        return this->bind_interrupt(inst->get_dma_ptr());
+        m_inst = inst;
+        this->bind_interrupt(inst->get_dma_ptr());
     }   
     inline void handle_inst(size_t n) override 
     {
-        m_inst[n]->callback_from_isr();
+        assert(m_inst);
+        m_inst->callback_from_isr(this->m_dma_channels[n]);
     }
     // void handle_isr() override
     // {   

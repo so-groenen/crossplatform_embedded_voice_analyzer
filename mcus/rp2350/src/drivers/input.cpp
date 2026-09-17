@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <hardware/gpio.h>
 
-
+ 
 
 Input::Input(uint16_t pin, Pull pull)
     : m_pin{pin}

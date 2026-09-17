@@ -5,81 +5,43 @@
  
  
 #include "embedded_hal/heapless.hpp"
+#include <cstddef>
 #include <hardware/irq.h>
 #include <hardware/structs/dma.h>
 #include "interrupts/dma_handlers.hpp"
+#include "interrupts/task_handler.hpp"
+
 
 using embedded_hal::heapless::Vector;
 
 namespace interrupts 
 {
 
-    namespace details 
-    {
-        // We don't expose this class.
-        
-        template<irq_num_rp2350 IRQ_n, size_t N>
-        class AsyncDmaHandlerBase : public DmaHandler<IRQ_n, N>  
-        {
-        protected:
-            Vector<PicoTask*, N> m_tasks{};
-        private:
-            inline void handle_task(size_t n) 
-            {
-                if(this->m_tasks[n])
-                {
-                    // #ifdef DEBUG
-                    // printf(" >>> Hello from RTOS DMA Handler!\n");
-                    // #endif 
-                    bool xHigherPriorityTaskWoken{};
-                    this->m_tasks[0]->notifyGiveFromISR(xHigherPriorityTaskWoken);
-                    if(xHigherPriorityTaskWoken)
-                        FreeRTOS::Kernel::yield();
-                }
-            }
-        public:
-            explicit AsyncDmaHandlerBase(irq_handler_t handler)
-                : DmaHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
-            {
-            }
-            void handle_isr() override
-            {   
-                for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-                {
-                    if(this->is_event(n))
-                    {
-                        this->m_ready_flags[n] = true;
-                        this->acknowledge_isr(n);
-                        this->handle_inst(n);
-                        handle_task(n);
-                    }
-                }
-            }
-        };
-    }
-
-
-
     template<irq_num_rp2350 IRQ_n, size_t N>
-    class AsyncDmaHandler : public details::AsyncDmaHandlerBase<IRQ_n, N>, public IAsyncDmaHandler
+    class AsyncDmaHandler final: public IAsyncDmaHandler, public AbstractDmaHandler<IRQ_n,N> 
     {
+        TaskHandler<N> m_task_handler{};
     public:
         explicit AsyncDmaHandler(irq_handler_t handler)
-            : details::AsyncDmaHandlerBase<IRQ_n, N>(handler)//, m_irqn(irqn)
+            : AbstractDmaHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
         {
         }
         void bind_interrupt_from_rtos(Dma* dma, PicoTask* task) override
         {
             this->bind_interrupt(dma);
-            if(!this->m_tasks.push_back(task))
+            if(!m_task_handler.add_task(task))
                 panic("DMA handler: Task overflow!");
+        }
+        void handle_inst(size_t n) override
+        {
+            m_task_handler.handle_task(n);
         }
     };
 
 
 
     template<typename T>
-    concept IsRtosDmaIsrCallback = HasDmaIsrCallback<T> && requires(T t)
+    concept IsRtosDmaIsrCallback = IsDmaCallback<T> && requires(T t)
     {
         {t.get_task()} -> std::same_as<PicoTask*>;
     };
@@ -88,25 +50,28 @@ namespace interrupts
     #define _DMA_ISR_RTOS_CALLBACK_ASSERT(X) static_assert(IsRtosDmaIsrCallback<X>, "must implement get_task()");
 
 
-    template<irq_num_rp2350 IRQ_n, size_t N_Channels, typename Driver>
+    template<irq_num_rp2350 IRQ_n, size_t N, typename Driver>
     requires IsRtosDmaIsrCallback<Driver>
-    class AsyncDmaHandlerWithCallback: public details::AsyncDmaHandlerBase<IRQ_n, N_Channels>
+    class AsyncDmaHandlerWithCallback:  public AbstractDmaHandler<IRQ_n,N> 
     {
-        Vector<Driver*, N_Channels> m_inst{};
+        Driver* m_inst{};
+        TaskHandler<N> m_task_handler{};
     public:    
         explicit AsyncDmaHandlerWithCallback(irq_handler_t handler)
-            : details::AsyncDmaHandlerBase<IRQ_n, N_Channels>(handler)//, m_irqn(irqn)
+            : AbstractDmaHandler<IRQ_n, N>(handler)//, m_irqn(irqn)
         {
         }
-        inline bool& bind_rtos_driver(Driver* inst)
+        inline void bind_rtos_driver(Driver* inst)
         {
-            m_inst.push_back(inst);
-            this->m_tasks.push_back(inst->get_task());
-            return this->bind_interrupt(inst->get_dma_ptr());
+            m_inst = inst;
+            m_task_handler.add_task(inst->get_task());
+            this->bind_interrupt(inst->get_dma_ptr());
         }   
         inline void handle_inst(size_t n) override 
         {
-            m_inst[n]->callback_from_isr();
+            m_task_handler.handle_task(n);
+            assert(m_inst);
+            m_inst->callback_from_isr(this->m_dma_channels[n]);
         }
     };
 }

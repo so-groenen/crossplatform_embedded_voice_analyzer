@@ -8,6 +8,7 @@
 #include "drivers/pico_task.hpp"
 #include "drivers/pio.hpp"
 #include "types.hpp"
+#include <cassert>
 #include <concepts>
 #include "voice_analyzer.hpp"
 
@@ -28,6 +29,7 @@ protected:
     P m_i2s;
     size_t m_current_buff{};
     std::span<u32> m_ping_pong[2];
+    bool m_isr_fired{};
 
     void setup_rx_mode() //requires (M == TransferMode::Rx)
     {
@@ -53,16 +55,26 @@ public:
 
         setup_rx_mode();
     }
-
+    inline bool has_isr_fired() const 
+    {
+        return m_isr_fired;
+    }
+    inline void acknowledge_isr() 
+    {
+        m_isr_fired = false;
+    }
     u32 get_sample_rate() const
     {
         return m_i2s.get_sample_rate();
     }
 
-    _DMA_ISR_CALLBACK void callback_from_isr()
+    _DMA_ISR_CALLBACK void callback_from_isr(uint dma_chan)
     {
+        assert(m_dma.channel() == dma_chan);
+        
         m_current_buff ^= 1; 
         m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
+        m_isr_fired = true;
     }
     _DMA_ISR_CALLBACK Dma* get_dma_ptr() 
     {
@@ -94,7 +106,7 @@ template<pio::IsPioProgram P>
 requires pio::IsPioReceiver<P> && IsI2s<P>
 class SPH0645Mic : public AbstractI2sDriver<P>
 {
-    bool& m_ready_flag;
+    // bool& m_ready_flag;
 public:
     template<irq_num_rp2350 IRQ_n, size_t N_Channels>
     SPH0645Mic(P pio_i2s,
@@ -102,18 +114,19 @@ public:
             std::span<u32> pong,
             Dma dma,
             interrupts::DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
-        : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
-            m_ready_flag{irq.bind_driver(this)}
+        : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}
+            
     {
+        irq.bind_driver(this);
         this->m_dma.enable_channel(true);
     }
     inline void read_blocking(std::span<u32>& rx_buffer) override
     {
-        while(!m_ready_flag)
+        while(!this->has_isr_fired())
         {
             tight_loop_contents();
         }
-        m_ready_flag = false;
+        this->acknowledge_isr();
         rx_buffer = this->m_ping_pong[this->m_current_buff ^ 1];
     }
  
@@ -146,7 +159,7 @@ public:
         return m_task;
     }
 
-    _DMA_ISR_RTOS_CALLBACK  inline void read_blocking(std::span<u32>& rx_buffer) override
+    inline void read_blocking(std::span<u32>& rx_buffer) override
     {
         // while(!m_ready_flag)
         // {

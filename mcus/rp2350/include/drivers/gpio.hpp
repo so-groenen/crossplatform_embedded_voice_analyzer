@@ -48,7 +48,7 @@ class Output
         }
     }
 public:
-    Output(gpio::Level level = gpio::Level::Low) requires (!UseCyw43)
+    explicit Output(gpio::Level level = gpio::Level::Low) requires (!UseCyw43)
         : m_pin{DefaultPin}//, m_level{level}
     {
         gpio_init(DefaultPin);
@@ -56,7 +56,7 @@ public:
         _put(static_cast<bool>(level));
     }
 
-    Output(gpio::Level level = gpio::Level::Low) requires (UseCyw43)
+    explicit Output(gpio::Level level = gpio::Level::Low) requires (UseCyw43)
         : m_pin{CYW43_WL_GPIO_LED_PIN} //, m_level{level}
     {
         cyw43_arch_init();

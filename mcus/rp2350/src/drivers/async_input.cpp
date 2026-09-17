@@ -13,16 +13,16 @@
 
  
 
-AsyncInput::AsyncInput(uint16_t pin, Pull pull, PicoTask* task, IAsyncInputHandler& notifier)
+AsyncInput::AsyncInput(uint16_t pin, Pull pull, PicoTask* task, interrupts::IAsyncInputHandler& notifier)
     : Input{pin, pull}, m_task{task}
 {
     notifier.bind_interrupt_from_rtos(this, task);
-    gpio_set_irq_enabled(m_pin, all_irq, false);
+    disable_interrupts();
 }
 
 void AsyncInput::wait_for_rising_edge()
 {
-    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_RISE, true);
+    enable_interrupts(GPIO_IRQ_EDGE_RISE);
     m_task->awaitNotifs();
     gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
@@ -30,7 +30,7 @@ void AsyncInput::wait_for_rising_edge()
 }
 void AsyncInput::wait_for_falling_edge()
 {
-    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL, true);
+    enable_interrupts(GPIO_IRQ_EDGE_FALL);
     m_task->awaitNotifs();
     gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
@@ -38,7 +38,7 @@ void AsyncInput::wait_for_falling_edge()
 }
 void AsyncInput::wait_for_any_edge()
 {
-    gpio_set_irq_enabled(m_pin, GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE, true);
+    enable_interrupts(GPIO_IRQ_EDGE_FALL|GPIO_IRQ_EDGE_RISE);
     m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
     gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
@@ -49,7 +49,7 @@ void AsyncInput::wait_for_high()
     if(is_high())
         return;
 
-    gpio_set_irq_enabled(m_pin, GPIO_IRQ_LEVEL_HIGH, true);
+    enable_interrupts(GPIO_IRQ_LEVEL_HIGH);
     m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
     gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time
@@ -59,8 +59,8 @@ void AsyncInput::wait_for_low()
 {
     if(is_low())
         return;
-    
-    gpio_set_irq_enabled(m_pin, GPIO_IRQ_LEVEL_LOW, true);
+
+    enable_interrupts(GPIO_IRQ_LEVEL_LOW);
     m_task->awaitNotifs();                      // Interrupt fires & acknowledged here
     gpio_acknowledge_irq(m_pin, all_irq);        // clear additional interrupt
     gpio_set_irq_enabled(m_pin, all_irq, false); // disable, until next time

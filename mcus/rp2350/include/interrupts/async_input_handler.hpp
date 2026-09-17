@@ -4,75 +4,42 @@
 // #include "drivers/interface_async_input_handler.hpp"
 #include "drivers/async_input.hpp"
 #include "drivers/input.hpp"
+#include "interrupts/input_handlers.hpp"
+#include "interrupts/interface_input_handlers.hpp"
+#include "interrupts/task_handler.hpp"
 #include <cstddef>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <array>
+#include <pico/platform/panic.h>
 
 
-
-template<size_t N>
-class AsyncInputHandler : public IAsyncInputHandler
+namespace interrupts
 {
-    std::array<uint16_t, N> m_pins{};
-    std::array<PicoTask*, N> m_tasks{};
-    irq_handler_t m_handler{};
-    size_t n_btns{};
-public:
-    explicit AsyncInputHandler(irq_handler_t handler)
-        : m_handler(handler)
+    template<size_t N>
+    class AsyncInputHandler : public  IAsyncInputHandler, public AbstractInputHandler<N>
     {
-        assert(handler && "handler must be valid");
-    }
+        TaskHandler<N> m_tasks{};
+    public:
+        explicit AsyncInputHandler(irq_handler_t handler)
+            : AbstractInputHandler<N>(handler)
+        {
+            assert(handler && "handler must be valid");
+        }   
+        void bind_interrupt_from_rtos(const Input* btn, PicoTask* task) override
+        {
+            this->bind_interrupt(btn);
+            if(!m_tasks.add_task(task))
+                panic("AsyncInputHandler: Could not add task!");
+        }
+        inline void handle_inst(size_t n) override
+        {
+            m_tasks.handle_task(n);
+        }
     
-    AsyncInputHandler& operator()(PicoTask* task)
-    {
-        return *this;
-    }
-    void bind_interrupt_from_rtos(Input* btn, PicoTask* task) override
-    {
-        if(n_btns < N && btn && task)
-        {
-            m_pins[n_btns]  = btn->pin();
-            m_tasks[n_btns] = task;
-            n_btns++;
-            
-            gpio_add_raw_irq_handler(btn->pin(), m_handler);
-            // gpio_set_irq_enabled(btn->pin(), btn->mode(), true);
-            irq_set_enabled(IO_IRQ_BANK0, true);
-        }       
-    }
-    inline void handle_inst(size_t n) override
-    {
-        if(m_tasks[n] /*&& btn->is_awaiting()*/ ) // if we did NOT call a wait_for_blabl(), then we do not add notifs!
-        {
-            bool higherPriorityTaskWoken = false;
-            m_tasks[n]->notifyGiveFromISR(higherPriorityTaskWoken);
-            if(higherPriorityTaskWoken)
-                FreeRTOS::Kernel::yield();
-        }
-    }
-    inline void handle_isr() override
-    {
-        for (size_t n = 0; n < n_btns; ++n)
-        {
-            if (gpio_get_irq_event_mask(m_pins[n]) & AsyncInput::all_irq) 
-            {
-                gpio_acknowledge_irq(m_pins[n], AsyncInput::all_irq);
-                handle_inst(n);
-            }
-        }
-    }
-};
+    };
 
-#define bind_interrupt_EXTI(irq_name, handler_name, n_exti)        \
-    void handler_name();                                               \
-    [[maybe_unused]] static AsyncInputHandler<n_exti> irq_name{handler_name};   \
-    void handler_name() {                                              \
-        irq_name.handle_isr();                                          \
-    }
-
- 
+}
 // #include "FreeRTOS/Kernel.hpp"
 // #include "FreeRTOS/Task.hpp"
 // #include "drivers/pico_task.hpp"

@@ -34,8 +34,7 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/spi_async.hpp"
-// #include "drivers/spi_async.hpp"
-#include "drivers/async_dma_handler.hpp"
+#include "interrupts/async_dma_handlers.hpp"
 #include "types.hpp"
 
 #define Rtos_sleep_ms(X) delay(pdMS_TO_TICKS((X)));
@@ -52,8 +51,8 @@ constexpr uint DMA_CH1      = 1;
 // use it to register N_channel = 1 interrupt from DMA channel
 // and also register the corresponding task to block / unblock it!
 
-bind_interrupt_DMA_0(irqs, my_handler, N_CHANNELS);
-
+using DmaHandler = interrupts::AsyncDmaHandler<DMA_IRQ_0, N_CHANNELS>;
+BIND_INTERRUPT(irqs, DmaHandler, my_handler);
 
  
 using namespace hardware::spi;
