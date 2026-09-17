@@ -5,14 +5,19 @@
 
 namespace interrupts 
 {
-    class IIrqHandler
+    class InterfaceIRQHandler
     {
         public:
-        virtual ~IIrqHandler() = default;
-        virtual void handle_isr() = 0;
-        virtual void handle_inst(size_t n) = 0;
+            virtual bool is_event(size_t n) const = 0;
+            virtual void acknowledge_isr(size_t n) = 0;
+            virtual void handle_inst(size_t n) = 0; 
+            virtual void handle_isr() = 0;
+            virtual ~InterfaceIRQHandler() = default;
     };
 }
+
+
+
 
 #define BIND_INTERRUPT(irq_name, class, handler_name)       \
     void handler_name();                                    \

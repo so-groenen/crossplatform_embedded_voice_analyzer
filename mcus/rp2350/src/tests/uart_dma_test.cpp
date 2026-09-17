@@ -11,7 +11,7 @@
 #include <hardware/regs/intctrl.h>
 #include <hardware/sync.h>
 #include <limits>
-#include <pico/cyw43_arch.h>
+// #include <pico/cyw43_arch.h>
 #include <pico/platform/common.h>
 #include <pico/platform/panic.h>
 #include <pico/stdio.h>
@@ -19,23 +19,23 @@
 #include <pico/types.h>
 #include <span>
 #include <stddef.h>
-#include "drivers/async_dma_handler.hpp"
+#include "interrupts/dma_handlers.hpp"
 #include "drivers/dma.hpp"
 
 #include "drivers/uart.hpp"
 
 
 using namespace hardware::uart;
-
+using namespace interrupts;
 
 
 constexpr size_t N_channel = 1;
 
-class UartIrq : public DmaHandlerBase<DMA_IRQ_0, N_channel>  
+class UartIrq : public AbstractDmaHandler<DMA_IRQ_0, N_channel>  
 {
 public:
     explicit UartIrq(irq_handler_t handler)
-        : DmaHandlerBase<DMA_IRQ_0, N_channel>(handler) 
+        : AbstractDmaHandler<DMA_IRQ_0, N_channel>(handler) 
     {
     }
     inline void handle_inst(size_t n) override 

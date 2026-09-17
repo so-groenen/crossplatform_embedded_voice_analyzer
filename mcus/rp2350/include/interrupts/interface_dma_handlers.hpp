@@ -11,15 +11,14 @@
 
 #include "drivers/dma.hpp"
 #include "drivers/pico_task.hpp"
-#include "interrupts/interface_irq_handler.hpp"
-
+ 
 namespace interrupts
 {
-    class IDmaHandler : public IIrqHandler
+    class IDmaHandler 
     {
     public:
         virtual ~IDmaHandler() = default;
-        virtual bool& bind_interrupt(Dma* dma) = 0;
+        virtual void bind_interrupt(Dma* dma) = 0;
     };
 
     class IAsyncDmaHandler

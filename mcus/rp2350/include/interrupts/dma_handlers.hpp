@@ -8,6 +8,7 @@
 #include <hardware/irq.h>
 #include <hardware/structs/dma.h>
 #include "interrupts/interface_dma_handlers.hpp"
+#include "interrupts/interface_irq_handler.hpp"
 
 using embedded_hal::heapless::Vector;
 
@@ -15,13 +16,13 @@ namespace interrupts
 {
 
 template<irq_num_rp2350 IRQ_n, size_t N_Channels>
-class DmaHandler: public IDmaHandler
+class AbstractDmaHandler: public IDmaHandler, public InterfaceIRQHandler
 {
 protected:
     irq_handler_t m_handler{};
     Vector<uint, N_Channels> m_dma_channels{};
-    Vector<bool, N_Channels> m_ready_flags{};
-    bool is_event(size_t n) const
+    // Vector<bool, N_Channels> m_ready_flags{};
+    bool is_event(size_t n) const override
     {
         if constexpr (IRQ_n == DMA_IRQ_0)
         {
@@ -42,7 +43,7 @@ protected:
 
         }
     }
-    void acknowledge_isr(size_t n)
+    void acknowledge_isr(size_t n) override
     {
         if constexpr (IRQ_n == DMA_IRQ_0)
         {
@@ -62,38 +63,30 @@ protected:
         }
     }
 public:
-    explicit DmaHandler(irq_handler_t handler)
+    explicit AbstractDmaHandler(irq_handler_t handler)
         : m_handler(handler)//, m_irqn(irqn)
     {
+        irq_set_exclusive_handler(IRQ_n, m_handler);
+        irq_set_enabled(IRQ_n, true);
     }
     // returns a "ready flag, which will be set to True when it fires"
-    bool& bind_interrupt(Dma* dma) override
+    void bind_interrupt(Dma* dma) override
     {
         size_t n = m_dma_channels.size();
         if(!m_dma_channels.push_back(dma->channel()))
             panic("Bind interrupt: m_dma_channels overflow\n");
 
         dma->set_irq(IRQ_n);
+ 
+    }
 
-        static bool bound = false;
-        if(m_handler && !bound)
-        {
-            irq_set_exclusive_handler(IRQ_n, m_handler);
-            irq_set_enabled(IRQ_n, true);
-            bound = true;
-        }
-        return m_ready_flags[n];
-    }
-    inline void handle_inst(size_t n) override 
-    {
-    }
     inline void handle_isr() override
     {   
         for(size_t n = 0; n < this->m_dma_channels.size(); n++)
         {
             if(this->is_event(n))
             {
-                m_ready_flags[n] = true;
+                // m_ready_flags[n] = true;
                 this->acknowledge_isr(n);
                 handle_inst(n);
             }
@@ -118,12 +111,12 @@ concept HasDmaIsrCallback = requires(T t)
 
 template<irq_num_rp2350 IRQ_n, size_t N_Channels, typename Driver>
 requires HasDmaIsrCallback<Driver>
-class DmaHandlerWithCallback: public DmaHandler<IRQ_n, N_Channels>
+class DmaHandlerWithCallback: public AbstractDmaHandler<IRQ_n, N_Channels>
 {
     Vector<Driver*, N_Channels> m_inst{};
 public:    
     explicit DmaHandlerWithCallback(irq_handler_t handler)
-        : DmaHandler<IRQ_n, N_Channels>(handler)//, m_irqn(irqn)
+        : AbstractDmaHandler<IRQ_n, N_Channels>(handler)//, m_irqn(irqn)
     {
     }
     inline bool& bind_driver(Driver* inst)
@@ -135,18 +128,18 @@ public:
     {
         m_inst[n]->callback_from_isr();
     }
-    void handle_isr() override
-    {   
-        for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-        {
-            if(this->is_event(n))
-            {
-                this->m_ready_flags[n] = true;
-                this->acknowledge_isr(n);
-                handle_inst(n);
-            }
-        }
-    }
+    // void handle_isr() override
+    // {   
+    //     for(size_t n = 0; n < this->m_dma_channels.size(); n++)
+    //     {
+    //         if(this->is_event(n))
+    //         {
+    //             this->m_ready_flags[n] = true;
+    //             this->acknowledge_isr(n);
+    //             handle_inst(n);
+    //         }
+    //     }
+    // }
 };
 
 }
