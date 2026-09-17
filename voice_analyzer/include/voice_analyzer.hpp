@@ -150,6 +150,8 @@ public:
         }
 
         f32 est_freq = (static_cast<f32>(peak_bin) + d) * bin_resolution;
+
+        m_mags[0] = est_freq;
         return est_freq;
     }
 };

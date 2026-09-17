@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <hardware/dma.h>
+#include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/regs/dreq.h>
 #include <hardware/regs/intctrl.h>
@@ -12,6 +13,7 @@
 #include <pico/platform/panic.h>
 // #include "arm_math_types.h"
 #include "drivers/gpio.hpp"
+#include "drivers/input.hpp"
 #include "drivers/uart.hpp"
 #include <pico/stdio.h>
 #include <pico/time.h>
@@ -45,7 +47,7 @@ using I2sIrqHandler = interrupts::DmaHandlerWithCallback<DMA_IRQ_0, N_channel, I
 
 
 // bind interrupt handler class to interrupt service routine.
-BIND_INTERRUPT(irqs, I2sIrqHandler, i2s_handler);
+BIND_INTERRUPT(i2s_irq, I2sIrqHandler, i2s_handler);
  
  
 constexpr size_t FFT_SIZE   = 1024;
@@ -60,7 +62,48 @@ constexpr u32 DMA_CH0             = 0;
 constexpr u32 DMA_CH1             = 1;
 
 
-// static tiny_dsp::RealFFT dsp{FFT_SIZE};
+enum class UserMode : u8
+{
+    Peak = 0,
+    Spectrum = 1
+};
+
+
+#include "interrupts/input_handlers.hpp"
+
+class ButtonDriver
+{
+    Input& m_btn1;
+    pico2_w::Output& m_led;
+    i32 m_debounce_us{10'000};
+    absolute_time_t m_last1{get_absolute_time()};
+    volatile UserMode& m_mode;
+public:
+    INPUT_HANDLER_CLASS(ButtonDriver, irq, Input& bt1, pico2_w::Output& led, volatile UserMode& mode)
+        : m_btn1(bt1), m_led(led), m_mode(mode)
+    {
+        irq.bind_driver(this);
+        irq.bind_interrupt(&m_btn1);
+    }
+    _ISR_INPUT_CALLBACK void callback_from_isr(u16 pin)
+    {
+        assert(pin = m_btn1.pin());
+        auto now  = get_absolute_time(); 
+        if(absolute_time_diff_us(m_last1, now) > m_debounce_us)
+        {
+            m_mode = (m_mode == UserMode::Peak)? UserMode::Spectrum : UserMode::Peak;
+            m_led.toggle();
+        }
+    }
+};
+
+// Define the MyIRQHandler class which will call the ButtonDriver callback from within the ISR, and register 1 button
+using MyIRQHandler = INPUT_IRQ_HANDLER(ButtonDriver, 1);
+ 
+// Create a irq instance of fthe MyIRQHandler class, and bind it to the low level C ISR. 
+BIND_INTERRUPT(btn_irq, MyIRQHandler, handler)  
+
+ 
 
 #pragma pack(push, 1)
 template<typename T, size_t N>
@@ -79,7 +122,14 @@ struct Packet_t
 };
 #pragma pack(pop)
 
-
+#pragma pack(push, 1)
+template<typename T>
+struct Single_t 
+{
+    std::array<u8,4> header;                               
+    T data;
+};
+#pragma pack(pop)
 
 void error_led(embedded_hal::output::IsOutput auto& led)
 {
@@ -97,8 +147,29 @@ using voice_analyzer::VoiceAnalyzerConfig;
 using voice_analyzer::VoiceAnalyzer;
 
  
+template<typename T>
+inline auto multicore_span_tx(const std::span<T>& span_data)
+{
+    auto raw_data = reinterpret_cast<u32>(span_data.data());
+    auto len      = static_cast<u32>(span_data.size());
+    multicore_fifo_push_blocking(raw_data);
+    multicore_fifo_push_blocking(len);
+
+}
+
+template<typename T>
+inline auto multicore_span_rx() -> std::span<T>
+{
+    auto raw_data = multicore_fifo_pop_blocking();
+    auto len      = multicore_fifo_pop_blocking();
+
+    return std::span<T>{reinterpret_cast<T*>(raw_data), static_cast<size_t>(len)};
+}
+
+
 void core1_entry() 
 {
+    btn_irq.enable(true); // enable interrupts on core1!
 
     // constexpr u32 baudrate = 250'000;     
     constexpr u32 baudrate = 921'600;     
@@ -106,39 +177,63 @@ void core1_entry()
     auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
     uart.set_baudrate(baudrate);
 
-
-    static Packet_t<f32, FFT_SIZE> audio_packet;
     static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    audio_packet.header     = {0xAA, 0xBB, 0xCC, 0xDD};
-    magnitude_packet.header = {0xAB, 0xBC, 0xCD, 0xDE};
+    static Single_t<f32> peak_packet;
+
+    peak_packet.header       = {0xAB, 0xBC, 0xCD, 0xDE};
+    magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
+
 
     constexpr u16 LED_PIN = 15;
-    pico2_w::Output led_core1{LED_PIN};
+    constexpr u16 BTN_PIN1{10};
 
-    CountdownTimer<1> tasks{};
+
+    pico2_w::Output led_core1{LED_PIN};
+    Input button(BTN_PIN1, Pull::Up);
+    button.enable_interrupts(GPIO_IRQ_EDGE_FALL);
+
+    CountdownTimer<2> tasks{};
     tasks.add_task_ms(250);
- 
+    tasks.add_task_ms(2000);
+
     constexpr size_t led_task  = 0;
+    constexpr size_t switch_task  = 1;
     
+    Dma dma{};
+    dma.read_from_memory(true);
+    dma.write_to_memory(true);
+    dma.set_transfer_size<f32>();
+    dma.set_data_request(DREQ_FORCE);
  
+    volatile UserMode mode = UserMode::Peak;
+    ButtonDriver button_driver(btn_irq, button, led_core1, mode);
+
     while (true)
     {
-        if(tasks.is_ready(led_task))
-            led_core1.toggle();
- 
-        u32 raw_samples = multicore_fifo_pop_blocking();
-        auto raw_samples_ptr = reinterpret_cast<const f32*>(raw_samples);
+         
+        const UserMode local_mode = mode;
+        // u32 raw_mags = multicore_fifo_pop_blocking();
+        // auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
+        // if(tasks.is_ready(switch_task))
+        //     mode = static_cast<UserMode>(static_cast<u8>(mode) ^ 1);
         
-        u32 raw_mags = multicore_fifo_pop_blocking();
-        auto raw_mags_ptr = reinterpret_cast<const f32*>(raw_mags);
 
- 
-        magnitude_packet.copy_sample(std::span{raw_mags_ptr, FFT_SIZE/2});
-        audio_packet.copy_sample(std::span{raw_samples_ptr, FFT_SIZE});
+        auto mags = multicore_span_rx<f32>();
+        peak_packet.data = mags[0];
+        magnitude_packet.copy_sample(mags);
+        // dma.config_transfer(magnitude_packet.samples.data(), mags.data(), mags.size());
+        // dma.await_blocking();
 
-        uart.write_dma(&audio_packet, sizeof(audio_packet));
         uart.dma_tx().await_blocking();
-        uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+        switch (local_mode)
+        {
+            case UserMode::Peak:
+                uart.write_dma(&peak_packet, sizeof(peak_packet));
+                break;
+            case UserMode::Spectrum:
+                uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+                break;
+        }
     }
 }
 
@@ -147,6 +242,8 @@ void core1_entry()
 int main() 
 {
     stdio_init_all();
+    // irq_set_enabled(IO_IRQ_BANK0, false);
+
     sleep_ms(25);
     multicore_reset_core1();
     sleep_ms(25);
@@ -167,7 +264,7 @@ int main()
         PING,
         PONG,
         Dma{},
-        irqs};
+        i2s_irq};
 
     VOICE_ANALYZER_I2S_ASSERT(I2sMicrophone);
  
@@ -199,13 +296,15 @@ int main()
         // float peak = analyzer.get_peak<use_quad_interpol>();
         // if(timer.is_ready(peak_task))
         //     printf("Peak: %f \n", peak);
-        analyzer.compute_magnitudes();
+        // analyzer.compute_magnitudes();
+        analyzer.get_peak<true>();
 
-        auto raw_samples_ptr = reinterpret_cast<uintptr_t>(analyzer.get_raw_samples().data());
-        auto raw_mag_ptr     = reinterpret_cast<uintptr_t>(analyzer.get_raw_mag().data());
+        // auto raw_samples_ptr = reinterpret_cast<uintptr_t>(analyzer.get_raw_samples().data());
+        // auto raw_mag_ptr     = reinterpret_cast<uintptr_t>(analyzer.get_raw_mag().data());
 
-        multicore_fifo_push_blocking(raw_samples_ptr);
-        multicore_fifo_push_blocking(raw_mag_ptr);
+        multicore_span_tx<f32>(analyzer.get_raw_mag());
+        // multicore_fifo_push_blocking(raw_samples_ptr);
+        // multicore_fifo_push_blocking(raw_mag_ptr);
     }
 }
 

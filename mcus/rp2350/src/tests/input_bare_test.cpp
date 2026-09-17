@@ -81,7 +81,7 @@ BIND_INTERRUPT(irq, MyIRQHandler, handler) // bind irq handler class to C functi
 int main() 
 {
     stdio_init_all();
-      
+
     Input bt1(BTN_PIN1, Pull::Up);
     Input bt2(BTN_PIN2, Pull::Up);
 

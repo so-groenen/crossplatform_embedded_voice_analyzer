@@ -55,6 +55,10 @@ namespace interrupts
                 }
             }
         }
+        void enable(bool v)
+        {
+            irq_set_enabled(IO_IRQ_BANK0, v);
+        }
     
     };
 
