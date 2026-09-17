@@ -32,9 +32,10 @@ freq_axis_interp = np.linspace(
 )
 
 # Packets definition
-HEADER_I2S = b"\xaa\xbb"
-HEADER_MAG = b"\xcc\xdd"
-
+HEADER_I2S = b"\xaa\xbb\xcc\xdd"
+HEADER_MAG = b"\xab\xbc\xcd\xde"
+HEADER_BYTES = 4
+ 
 SIZE_I2S = FFT_SIZE * 4
 SIZE_MAG = MAG_SIZE * 4
 
@@ -56,8 +57,8 @@ class UARTAudioParser:
         return bytes(buf)
 
     def update_data(self):
-        while self.ser.in_waiting >= 2:
-            header = self.ser.read(2)
+        while self.ser.in_waiting >= HEADER_BYTES:
+            header = self.ser.read(HEADER_BYTES)
             if header == HEADER_I2S:
                 raw_bytes = self.read_exact(SIZE_I2S)
                 if raw_bytes:

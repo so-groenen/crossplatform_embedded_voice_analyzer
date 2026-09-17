@@ -66,7 +66,7 @@ constexpr u32 DMA_CH1             = 1;
 template<typename T, size_t N>
 struct Packet_t 
 {
-    std::array<u8,2> header;                               
+    std::array<u8,4> header;                               
     std::array<T, N> samples;        
     void copy_sample(const std::array<T, N>& buff)
     {
@@ -109,8 +109,8 @@ void core1_entry()
 
     static Packet_t<f32, FFT_SIZE> audio_packet;
     static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    audio_packet.header     = {0xAA, 0xBB};
-    magnitude_packet.header = {0xCC, 0xDD};
+    audio_packet.header     = {0xAA, 0xBB, 0xCC, 0xDD};
+    magnitude_packet.header = {0xAB, 0xBC, 0xCD, 0xDE};
 
     constexpr u16 LED_PIN = 15;
     pico2_w::Output led_core1{LED_PIN};
