@@ -128,19 +128,10 @@ public:
         assert(m_inst);
         m_inst->callback_from_isr(this->m_dma_channels[n]);
     }
-    // void handle_isr() override
-    // {   
-    //     for(size_t n = 0; n < this->m_dma_channels.size(); n++)
-    //     {
-    //         if(this->is_event(n))
-    //         {
-    //             this->m_ready_flags[n] = true;
-    //             this->acknowledge_isr(n);
-    //             handle_inst(n);
-    //         }
-    //     }
-    // }
 };
+
+#define DMA_HANDLER_CLASS(X, irq, ...)     template<irq_num_rp2350 IRQ_n, size_t N, interrupts::IsDmaCallback Driver> \
+                                            explicit X(interrupts::DmaHandlerWithCallback<IRQ_n,N, Driver>& irq, __VA_ARGS__)
 
 }
  

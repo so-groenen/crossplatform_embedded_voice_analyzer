@@ -101,6 +101,8 @@ public:
 };
 
 
+using interrupts::DmaHandlerWithCallback;
+
 
 template<pio::IsPioProgram P>
 requires pio::IsPioReceiver<P> && IsI2s<P>
@@ -108,12 +110,19 @@ class SPH0645Mic : public AbstractI2sDriver<P>
 {
     // bool& m_ready_flag;
 public:
-    template<irq_num_rp2350 IRQ_n, size_t N_Channels>
+    VOICE_ANALYZER_REGISTER_I2S_TYPE(u32);
+
+    template<irq_num_rp2350 IRQ_n, size_t N>
+    using DmaIrqHandler = DmaHandlerWithCallback<IRQ_n, N, SPH0645Mic<P> >;
+
+
+    template<irq_num_rp2350 IRQ_n, size_t N>
     SPH0645Mic(P pio_i2s,
             std::span<u32> ping, 
             std::span<u32> pong,
             Dma dma,
-            interrupts::DmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645Mic<P>>& irq)
+            DmaIrqHandler<IRQ_n,N> & irq)
+
         : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}
             
     {
@@ -131,7 +140,8 @@ public:
     }
  
 };
-
+ 
+using interrupts::AsyncDmaHandlerWithCallback;
 
 template<pio::IsPioProgram P>
 requires pio::IsPioReceiver<P> && IsI2s<P>
@@ -140,17 +150,25 @@ class SPH0645MicAsync : public AbstractI2sDriver<P>
     // bool& m_ready_flag;
     PicoTask* m_task{};
 public:
-    template<irq_num_rp2350 IRQ_n, size_t N_Channels>
+
+    VOICE_ANALYZER_REGISTER_I2S_TYPE(u32);
+
+
+    template<irq_num_rp2350 IRQ_n, size_t N>
+    using DmaIrqHandler = AsyncDmaHandlerWithCallback<IRQ_n, N, SPH0645Mic<P> >;
+
+    template<irq_num_rp2350 IRQ_n, size_t N>
     SPH0645MicAsync(P pio_i2s,
             std::span<u32> ping, 
             std::span<u32> pong,
             Dma dma,
             PicoTask* task,
-            interrupts::AsyncDmaHandlerWithCallback<IRQ_n, N_Channels, SPH0645MicAsync<P>>& irq)
+            DmaIrqHandler<IRQ_n, N>& irq)
         : AbstractI2sDriver<P>{std::move(pio_i2s), ping, pong, std::move(dma)}, 
             m_task{task}
     {
         irq.bind_rtos_driver(this);
+        // irq.bind_interrupt(&this->m_dma);
         this->m_dma.enable_channel(true);
     }
 
@@ -174,7 +192,7 @@ public:
 
 
 #include "drivers/i2s/i2s_mic.hpp"
-_DMA_ISR_CALLBACK_ASSERT(SPH0645Mic<PioI2sProgram>)
+_DMA_ISR_CALLBACK_ASSERT(SPH0645Mic<PioSph0645Program>)
 // assert(1);
 
 #endif

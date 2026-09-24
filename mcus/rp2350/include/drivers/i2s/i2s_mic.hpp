@@ -6,7 +6,7 @@
 #include "types.hpp"
 #include "drivers/pio.hpp"
 
-struct PioI2sConfig 
+struct Sph0645Config 
 {
     u32 sample_rate;
     u32 sck_pin;
@@ -15,11 +15,11 @@ struct PioI2sConfig
 };
 
   
-class PioI2sProgram : public pio::PioBaseProgram
+class PioSph0645Program : public pio::PioBaseProgram
 {
     u32 sample_rate{};
 public:
-    explicit PioI2sProgram(const PioI2sConfig& config)  
+    explicit PioSph0645Program(const Sph0645Config& config)  
         : PioBaseProgram(pio0, &i2s_pio_program), sample_rate(config.sample_rate)
     {
         assert(config.ws_pin == config.sck_pin +1);

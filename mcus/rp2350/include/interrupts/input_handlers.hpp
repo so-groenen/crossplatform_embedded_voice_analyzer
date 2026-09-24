@@ -97,8 +97,8 @@ namespace interrupts
 
     // #define HANDLERR(X,arg,irq) explicit X(arg, TESTInputHandlerCB<N, X>& irq)
     #define INPUT_IRQ_HANDLER(X, N)               interrupts::InputHandler<X, N>
-    #define INPUT_HANDLER_CLASS(X, irq, ...)     template<size_t N> \
-                                                explicit X(interrupts::InputHandler<X,N>& irq, __VA_ARGS__)
+    #define INPUT_CALLBACK_CLASS(X, irq, ...)     template<size_t N> \
+                                                  explicit X(interrupts::InputHandler<X,N>& irq, __VA_ARGS__)
 
 
     
