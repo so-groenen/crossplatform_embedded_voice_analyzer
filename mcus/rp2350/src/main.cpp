@@ -473,38 +473,18 @@ void core1_entry()
 #include <pico/low_power.h>
 
 
-
-class AppStateManager 
+class AppState
 {
-    Queue<AnalyzerMode>& m_analyzer_mode_queue;
-    AtomicFlag& m_core1_state;
     UserMode m_mode   = UserMode::Peak;
     ModeState m_state = ModeState::Running;
-
 public:
-    explicit AppStateManager(Queue<AnalyzerMode>& queue, AtomicFlag& flag)
-     : m_analyzer_mode_queue{queue}, m_core1_state{flag}
-    {
-    }
+    AppState() = default;
     inline UserMode user_mode() const {return m_mode;}
     inline ModeState state() const {return m_state;}
     void set_state(UserMode mode, ModeState state)
     {
         m_mode = mode;
         m_state = state;
-    }
-    void signal_core1(AnalyzerMode mode)
-    {
-        m_analyzer_mode_queue.try_add(mode);
-    }
-    void sev() // send event ARM instruction
-    {
-        __sev();
-    }
-    void await_and_acknowledge_core1_state_change()
-    {
-        m_core1_state.await_signal();
-        m_core1_state.acknowledge_signal();
     }
     void set_to_enter()
     {
@@ -525,6 +505,47 @@ public:
     }
 };
 
+
+
+class StateSynchronizer
+{
+    Queue<AnalyzerMode>& m_analyzer_mode_queue;
+    AtomicFlag& m_core1_state;
+public:
+    explicit StateSynchronizer(Queue<AnalyzerMode>& queue, AtomicFlag& flag)
+     : m_analyzer_mode_queue{queue}, m_core1_state{flag}
+    {
+    }
+    void signal_core1(AnalyzerMode mode)
+    {
+        m_analyzer_mode_queue.try_add(mode);
+    }
+    void sev() // send event ARM instruction
+    {
+        __sev();
+    }
+    void await_and_acknowledge_core1_state_change()
+    {
+        m_core1_state.await_signal();
+        m_core1_state.acknowledge_signal();
+    }
+};
+
+
+
+
+
+class AppStateManager : public StateSynchronizer , public AppState
+{
+public:
+    explicit AppStateManager(Queue<AnalyzerMode>& queue, AtomicFlag& flag)
+     : StateSynchronizer(queue, flag)
+    {
+    }
+};
+
+
+
 template<std::invocable Fn>
 void discard_some(Fn func, size_t N)
 {
@@ -532,68 +553,123 @@ void discard_some(Fn func, size_t N)
         (void)func();
 }
 
-class SomePrinter 
+
+class IVoiceAppMode 
 {
-    size_t m_it{};
-    size_t m_counter{};
+    public:
+    virtual ~IVoiceAppMode() = default;
+    virtual void enter() = 0;
+    virtual void run() = 0;
+    virtual void leave() = 0;
+};
+
+class PeakMode final : public IVoiceAppMode
+{
 public:
-    explicit SomePrinter(size_t iterations)
-     : m_it(iterations)
+    Single_t<f32> peak_packet;
+private:
+    StateSynchronizer& m_app_state_manager;
+    UartNonBlocking<TransferMode::Tx>& m_uart;
+    static inline f32 get_peaks()
     {
+        return multicore::pop_blocking<f32>();
+    } 
+public:
+    size_t samples_to_discard = 6;
+    explicit PeakMode(AppStateManager& state_manager, UartNonBlocking<TransferMode::Tx>& uart, size_t _samples_to_discard = 6)
+      : m_app_state_manager{state_manager}, m_uart(uart), samples_to_discard(_samples_to_discard)
+    {
+
     }
-    virtual void print_some(f32 v) = 0;
-    virtual ~SomePrinter() = default;
-protected:
-    bool is_ok()
+    void enter() override
     {
-        m_counter++;
-        if(m_counter == m_it)
-        {
-            m_counter = 0;
-            return true;
-        }
-        return false;
+        m_app_state_manager.signal_core1(AnalyzerMode::MeasurePeak);
+        m_app_state_manager.await_and_acknowledge_core1_state_change();
+        discard_some(get_peaks, samples_to_discard);
+    }
+    void run() override
+    {
+        peak_packet.data = get_peaks(); 
+        m_uart.dma_tx().await_blocking();                  
+        m_uart.write_dma(&peak_packet, sizeof(peak_packet));
+    }
+    void leave() override
+    {
+        
     }
 };
 
-class PeakPrinter : public SomePrinter
+template<size_t FFT_SIZE>
+class MagnitudeMode final : public IVoiceAppMode
 {
 public:
-    explicit PeakPrinter(size_t it)
-     : SomePrinter(it)
-    {}
-    void print_some(f32 v) override 
+    Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+private:
+    StateSynchronizer& m_state_sync;
+    UartNonBlocking<TransferMode::Tx>& m_uart;
+    static inline const f32* get_mags_ptr()
     {
-        if(this->is_ok())
-        {
-            printf("PEAK: Got %.2f Hz !\n", v);
-        }
+        return  multicore::pop_blocking<const f32*>();
+    } 
+public:
+    size_t samples_to_discard = 6;
+    explicit MagnitudeMode(StateSynchronizer& state_sync, UartNonBlocking<TransferMode::Tx>& uart, size_t _samples_to_discard = 6)
+      : m_state_sync{state_sync}, m_uart(uart), samples_to_discard(_samples_to_discard)
+    {
+
+    }
+    void enter() override
+    {
+        m_state_sync.signal_core1(AnalyzerMode::MeasureSpectrum);
+        m_state_sync.await_and_acknowledge_core1_state_change();
+        discard_some(get_mags_ptr, samples_to_discard);
+    }
+    void run() override
+    {
+        magnitude_packet.copy_sample(std::span{get_mags_ptr(), FFT_SIZE/2});
+
+        m_uart.dma_tx().await_blocking();
+        m_uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+    }
+    void leave() override
+    {
+        
     }
 };
 
-class MagPrinter : public SomePrinter
+
+class PauseMode final : public IVoiceAppMode
 {
+private:
+    StateSynchronizer& m_state_sync;
+    UartNonBlocking<TransferMode::Tx>& m_uart;
+ 
 public:
-    explicit MagPrinter(size_t it)
-     : SomePrinter(it)
-    {}
-    static f32 mean(std::span<const f32> arr)
+    explicit PauseMode(StateSynchronizer& state_manager, UartNonBlocking<TransferMode::Tx>& uart)
+      : m_state_sync{state_manager}, m_uart(uart) 
     {
-        f32 mean = 0;
-        for(const auto& v : arr)
-        {
-            mean += v;
-        }
-        return mean / arr.size();
     }
-    void print_some(f32 v) override 
+    void enter() override
     {
-        if(this->is_ok())
-        {
-            printf("MAG: Got %.2f Hz !\n", v);
-        }
+        m_uart.dma_tx().await_blocking();          
+        m_uart.wait_blocking_tx(); 
+        
+        m_state_sync.signal_core1(AnalyzerMode::Stop);
+        m_state_sync.await_and_acknowledge_core1_state_change();
+    }
+    void run() override
+    {
+        // __wfi();
+    }
+    void leave() override
+    {
+        m_state_sync.signal_core1(AnalyzerMode::Start);
+        m_state_sync.sev();
+        m_state_sync.await_and_acknowledge_core1_state_change();
     }
 };
+
+
 
 int main() 
 {
@@ -601,15 +677,13 @@ int main()
     btn_irq.enable(true); 
 
     s_analyzer_mode_queue = Queue<AnalyzerMode>(8, spin_lock_claim_unused(true));
-
-    // sleep_ms(100);
-    // multicore_reset_core1();
+ 
     sleep_ms(10);
  
 
 
-    AppStateManager app_manager(s_analyzer_mode_queue.value(), s_core1_state_changed);
-    app_manager.set_state(UserMode::Peak, ModeState::Entering); 
+    AppStateManager app_state_manager(s_analyzer_mode_queue.value(), s_core1_state_changed);
+    app_state_manager.set_state(UserMode::Peak, ModeState::Entering); 
 
 
     constexpr u32 baudrate = 921'600;      
@@ -620,11 +694,11 @@ int main()
     uart.set_baudrate(baudrate);
     uart.set_hardware_flow_control(true, true);
 
-    static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    static Single_t<f32> peak_packet;
+    // static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+    // static Single_t<f32> peak_packet;
 
-    peak_packet.header       = {0xAB, 0xBC, 0xCD, 0xDE};
-    magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
+    // peak_packet.header       = {0xAB, 0xBC, 0xCD, 0xDE};
+    // magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
 
     // BasicTimer<Reapating> timer{};
     // if(!timer.init_timer_ms(500))
@@ -651,134 +725,152 @@ int main()
  
     led_core0.set_high();
  
-    UserMode next_mode{app_manager.user_mode()};
+    UserMode next_mode{app_state_manager.user_mode()};
     multicore_launch_core1(core1_entry);
 
     constexpr size_t samples_to_discard = 6;
-    auto get_mag_pointers = []() -> const f32* {return multicore::pop_blocking<const f32*>();};
-    auto get_freq_peaks   = []() -> f32 {return multicore::pop_blocking<f32>();};
+    // auto get_mag_pointers = []() -> const f32* {return multicore::pop_blocking<const f32*>();};
+    // auto get_freq_peaks   = []() -> f32 {return multicore::pop_blocking<f32>();};
 
     // PeakPrinter peak_printer{3};
     // MagPrinter mag_printer{3};
 
+    static PauseMode pause_mode{app_state_manager, uart};
+    static PeakMode peak_mode{app_state_manager, uart, samples_to_discard};
+    static MagnitudeMode<FFT_SIZE> mag_mode{app_state_manager, uart, samples_to_discard};
+    
+    peak_mode.peak_packet.header      = {0xAB, 0xBC, 0xCD, 0xDE};
+    mag_mode.magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
+
+    IVoiceAppMode* app_mode_ptr = &peak_mode; 
+    app_mode_ptr->enter();
     while (true)    
     {
         if(button_driver.has_fired())
         {
             button_driver.acknowledge();
+            static IVoiceAppMode* last_mode_ptr{app_mode_ptr};
+            if(app_mode_ptr != &pause_mode)
+                last_mode_ptr = app_mode_ptr;
 
-            static UserMode last_mode{};
-            if(app_manager.user_mode() != UserMode::Pause)
-                last_mode = app_manager.user_mode();
-
+            app_mode_ptr->leave();
             if(button_driver.is_mode_change_event())
             {
-                next_mode = (last_mode == UserMode::Peak)? UserMode::Spectrum : UserMode::Peak;
+                app_mode_ptr = (last_mode_ptr == &peak_mode)? static_cast<IVoiceAppMode*>(&mag_mode) : &peak_mode;
             }
             else
             {
-                next_mode = (app_manager.user_mode() == UserMode::Pause)? last_mode : UserMode::Pause;
+                app_mode_ptr = (app_mode_ptr == &pause_mode)? last_mode_ptr : &pause_mode;
             }
-            app_manager.set_to_leave();
-        }
+            app_mode_ptr->enter();
 
- 
-        // if(timer.has_fired())
+
+            // static UserMode last_mode{};
+            // if(app_state_manager.user_mode() != UserMode::Pause)
+            //     last_mode = app_state_manager.user_mode();
+
+            // if(button_driver.is_mode_change_event())
+            // {
+            //     next_mode = (last_mode == UserMode::Peak)? UserMode::Spectrum : UserMode::Peak;
+            // }
+            // else
+            // {
+            //     next_mode = (app_state_manager.user_mode() == UserMode::Pause)? last_mode : UserMode::Pause;
+            // }
+            // app_state_manager.set_to_leave();
+        }
+        app_mode_ptr->run();
+
+
+        // switch (app_state_manager.user_mode())
         // {
-        //     timer.acknowledge();
-        //     led_core0.toggle();
-        // }
+        //     case UserMode::Peak:
+        //         switch (app_state_manager.state())
+        //         {
+        //             case ModeState::Entering:
+        //                 app_state_manager.signal_core1(AnalyzerMode::MeasurePeak);
+        //                 app_state_manager.await_and_acknowledge_core1_state_change();
+        //                 app_state_manager.set_to_run();
+        //                 discard_some(get_freq_peaks, samples_to_discard);
+        //                 [[fallthrough]];
+        //             case ModeState::Running:
+        //                 // peak_printer.print_some(get_freq_peaks());
+        //                 peak_packet.data = get_freq_peaks(); 
+        //                 uart.dma_tx().await_blocking();                  
+        //                 uart.write_dma(&peak_packet, sizeof(peak_packet));
+        //                 break;
+        //             case ModeState::Leaving:
+        //                 app_state_manager.transition_to(next_mode);
+        //                 break;
+        //         }
+        //         break;
 
-
-        switch (app_manager.user_mode())
-        {
-            case UserMode::Peak:
-                switch (app_manager.state())
-                {
-                    case ModeState::Entering:
-                        app_manager.signal_core1(AnalyzerMode::MeasurePeak);
-                        app_manager.await_and_acknowledge_core1_state_change();
-                        app_manager.set_to_run();
-                        discard_some(get_freq_peaks, samples_to_discard);
-                        [[fallthrough]];
-                    case ModeState::Running:
-                        // peak_printer.print_some(get_freq_peaks());
-                        peak_packet.data = get_freq_peaks(); 
-                        uart.dma_tx().await_blocking();                  
-                        uart.write_dma(&peak_packet, sizeof(peak_packet));
-                        break;
-                    case ModeState::Leaving:
-                        app_manager.transition_to(next_mode);
-                        break;
-                }
-                break;
-
-            case UserMode::Spectrum:
-                switch (app_manager.state())
-                {
-                    case ModeState::Entering:
-                        app_manager.signal_core1(AnalyzerMode::MeasureSpectrum);
-                        app_manager.await_and_acknowledge_core1_state_change();
-                        app_manager.set_to_run();
-                        discard_some(get_mag_pointers, samples_to_discard);
-                        [[fallthrough]];
-                    case ModeState::Running:
-                    // { 
-                        // To be replaced with SPI - LCD stuff!
-                        // dispatch data via UART to PySerial 
+        //     case UserMode::Spectrum:
+        //         switch (app_state_manager.state())
+        //         {
+        //             case ModeState::Entering:
+        //                 app_state_manager.signal_core1(AnalyzerMode::MeasureSpectrum);
+        //                 app_state_manager.await_and_acknowledge_core1_state_change();
+        //                 app_state_manager.set_to_run();
+        //                 discard_some(get_mag_pointers, samples_to_discard);
+        //                 [[fallthrough]];
+        //             case ModeState::Running:
+        //             // { 
+        //                 // To be replaced with SPI - LCD stuff!
+        //                 // dispatch data via UART to PySerial 
  
-                        // auto raw_mags_ptr = get_mag_pointers();
-                        // std::span<const f32> magnitudes{raw_mags_ptr, FFT_SIZE/2};
-                        // mag_printer.print_some(MagPrinter::mean(std::span{get_mag_pointers(), FFT_SIZE/2}));
-                        magnitude_packet.copy_sample(std::span{get_mag_pointers(), FFT_SIZE/2});
+        //                 // auto raw_mags_ptr = get_mag_pointers();
+        //                 // std::span<const f32> magnitudes{raw_mags_ptr, FFT_SIZE/2};
+        //                 // mag_printer.print_some(MagPrinter::mean(std::span{get_mag_pointers(), FFT_SIZE/2}));
+        //                 magnitude_packet.copy_sample(std::span{get_mag_pointers(), FFT_SIZE/2});
 
-                        uart.dma_tx().await_blocking();
-                        uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
-                        // // }
-                        break;
-                    case ModeState::Leaving:
-                        app_manager.transition_to(next_mode); 
-                        break;
-                }
-                break;
+        //                 uart.dma_tx().await_blocking();
+        //                 uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+        //                 // // }
+        //                 break;
+        //             case ModeState::Leaving:
+        //                 app_state_manager.transition_to(next_mode); 
+        //                 break;
+        //         }
+        //         break;
             
 
-            case UserMode::Pause:
-                switch (app_manager.state())
-                {
-                    case ModeState::Entering:
-                    {
-                        uart.dma_tx().await_blocking();          
-                        uart.wait_blocking_tx(); 
+        //     case UserMode::Pause:
+        //         switch (app_state_manager.state())
+        //         {
+        //             case ModeState::Entering:
+        //             {
+        //                 uart.dma_tx().await_blocking();          
+        //                 uart.wait_blocking_tx(); 
                         
-                        app_manager.signal_core1(AnalyzerMode::Stop);
-                        app_manager.await_and_acknowledge_core1_state_change();
-                        app_manager.set_to_run();
-                        // printf("Pause! \n");
-                    }
-                    [[fallthrough]];
+        //                 app_state_manager.signal_core1(AnalyzerMode::Stop);
+        //                 app_state_manager.await_and_acknowledge_core1_state_change();
+        //                 app_state_manager.set_to_run();
+        //                 // printf("Pause! \n");
+        //             }
+        //             [[fallthrough]];
                     
-                    case ModeState::Running:
-                    { 
-                        __wfi();
-                    }
-                    break;
+        //             case ModeState::Running:
+        //             { 
+        //                 __wfi();
+        //             }
+        //             break;
 
-                    case ModeState::Leaving:
-                    {
-                        app_manager.signal_core1(AnalyzerMode::Start);
-                        app_manager.sev();
-                        app_manager.await_and_acknowledge_core1_state_change();
-                        app_manager.transition_to(UserMode::Peak);
-                    }
-                    break;
-                }
-                break;
+        //             case ModeState::Leaving:
+        //             {
+        //                 app_state_manager.signal_core1(AnalyzerMode::Start);
+        //                 app_state_manager.sev();
+        //                 app_state_manager.await_and_acknowledge_core1_state_change();
+        //                 app_state_manager.transition_to(next_mode);
+        //             }
+        //             break;
+        //         }
+        //         break;
             
 
-            default:
-                break;
+        //     default:
+        //         break;
 
-        }
+        // }
     }
 }

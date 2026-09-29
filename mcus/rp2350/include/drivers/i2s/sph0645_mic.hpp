@@ -90,7 +90,7 @@ public:
         setup_rx_mode();        //reset to correct ping pong buffer
 
         m_i2s_pio.start();
-        m_dma.enable_channel(true);
+        // m_dma.enable_channel(true);
         m_dma.start();
     }
     void stop()
@@ -99,11 +99,6 @@ public:
         m_dma.await_blocking();
         m_i2s_pio.stop();
     }
-    // void change_buffer()
-    // {
-    //     m_current_buff ^= 1; 
-    //     m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
-    // }
 };
 
 
