@@ -60,6 +60,10 @@ public:
     {
         return m_uart;
     }
+    void set_hardware_flow_control(bool cts, bool rts)
+    {
+        uart_set_hw_flow(m_uart, cts, rts);
+    }
     io_rw_32* data_register() const
     {
         return &uart_get_hw(m_uart)->dr;
@@ -146,7 +150,11 @@ public:
     {
         return uart_get_dreq_num(m_uart, is_tx);
     }
-    
+    void wait_blocking_tx()
+    {
+        uart_tx_wait_blocking(m_uart);
+    }
+ 
     
     ~UartBlocking()
     {
