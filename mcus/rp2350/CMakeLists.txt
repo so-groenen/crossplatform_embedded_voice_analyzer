@@ -114,6 +114,7 @@ if(BUILD_MAIN)
         src/main.cpp
         ${DRIVER_SRC}
     )
+    target_link_libraries(rp2350_main PRIVATE pico_low_power )
     configure_pico_target(rp2350_main)
     configure_rtos(rp2350_main)
 endif()
@@ -175,7 +176,7 @@ if(BUILD_TESTS)
 
 
     add_executable(bare_metal_voice
-        src/bare_metal_voice.cpp 
+        src/tests/bare_metal_voice.cpp 
         ${DRIVER_SRC}
     )
     configure_pico_target(bare_metal_voice)

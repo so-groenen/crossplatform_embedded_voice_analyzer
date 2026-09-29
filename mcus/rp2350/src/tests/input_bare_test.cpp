@@ -42,7 +42,7 @@ class MyDriver
 public:
     // template<IsInputCallback Driver>
     // explicit MyDriver(Input& bt1, Input& bt2, Output& led1, Output& led2, InputHandler<Driver, num_buttons>& irq)
-    INPUT_HANDLER_CLASS(MyDriver, irq, Input& bt1, Input& bt2, Output& led1, Output& led2)
+    INPUT_CALLBACK_CLASS(MyDriver, irq, Input& bt1, Input& bt2, Output& led1, Output& led2)
         : m_btn1(bt1), m_btn2(bt2), m_led1(led1), m_led2(led2)
     {
         irq.bind_driver(this);

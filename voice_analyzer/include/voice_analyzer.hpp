@@ -115,10 +115,12 @@ public:
     {
         m_i2s.start(); 
     }
+
     void stop()
     {
-        m_i2s.start(); 
+        m_i2s.stop(); 
     }
+
     inline auto get_raw_mag() -> std::array<f32, FFT_N/2>&
     {
         return m_mags;

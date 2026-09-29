@@ -27,6 +27,7 @@
 #include "stats.hpp"
 #include "drivers/countdown_timer.hpp"
 #include "drivers/dma.hpp"
+#include "tiny_dsp.hpp"
 #include "voice_analyzer.hpp"
 #include "pico/multicore.h"
 #include "types.hpp"
@@ -40,7 +41,7 @@
 constexpr size_t N_channel = 1;
  
 
-using I2sMicrophone = SPH0645Mic<PioI2sProgram>;
+using I2sMicrophone = SPH0645Mic<PioSph0645Program>;
 using I2sIrqHandler = interrupts::DmaHandlerWithCallback<DMA_IRQ_0, N_channel, I2sMicrophone>;
 
 
@@ -95,6 +96,8 @@ using namespace hardware::uart;
 
 using voice_analyzer::VoiceAnalyzerConfig;
 using voice_analyzer::VoiceAnalyzer;
+using voice_analyzer::tiny_dsp::RealFloating32FFT;
+
 
  
 void core1_entry() 
@@ -154,7 +157,7 @@ int main()
     constexpr u16 CORE0_LED_PIN = 14;
     pico2_w::Output led_core0{CORE0_LED_PIN};
 
-    constexpr PioI2sConfig config
+    constexpr Sph0645Config config
     {
         .sample_rate = SAMPLE_RATE, // Word Select frequency: 
         .sck_pin     = 16,          // sck is 32 bit for left and 32bit for right, therefor serial clock is 64 * 16k
@@ -162,14 +165,14 @@ int main()
         .data_pin    = 18,          // bit sampled at serial clock rate, but only process left (Word Select low)
     };
      
-    I2sMicrophone i2s{
-        PioI2sProgram{config},
+    I2sMicrophone i2s_mic{
+        PioSph0645Program{config},
         PING,
         PONG,
         Dma{},
         irqs};
 
-    VOICE_ANALYZER_I2S_ASSERT(I2sMicrophone);
+    VOICE_ANALYZER_I2S_ASSERT(I2sMicrophone); // Assert that it satisfies the I2S concept
  
     VoiceAnalyzerConfig<FFT_SIZE> analyzer_config = 
     {
@@ -178,7 +181,11 @@ int main()
         .noise_threshold = 0.0f
     };
 
-    static VoiceAnalyzer analyzer{i2s, analyzer_config};
+    RealFloating32FFT dsp{FFT_SIZE};
+    VOICE_ANALYZER_FLOATING32_DSP_ASSERT(RealFloating32FFT);  
+
+
+    static VoiceAnalyzer analyzer{i2s_mic, dsp, analyzer_config};
     if(!analyzer.init())
         error_led(led_core0);
 

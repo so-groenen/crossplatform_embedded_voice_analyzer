@@ -4,7 +4,7 @@
         {
             "name": "Pico Debug (Cortex-Debug)",
             "cwd": "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
-            "executable": "${workspaceRoot}/build/pico2-debug/mcus/rp2350/test_raw_dma.elf",
+            "executable": "${workspaceRoot}/build/pico2-debug/mcus/rp2350/rp2350_main.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
@@ -23,7 +23,7 @@
             // Also works fine for flash binaries
             "overrideLaunchCommands": [
                 "monitor reset init",
-                "load \"${workspaceRoot}/build/pico2-debug/mcus/rp2350/test_raw_dma.elf\""
+                "load \"${workspaceRoot}/build/pico2-debug/mcus/rp2350/rp2350_main.elf\""
             ],
             "openOCDLaunchCommands": [
                 // "set USE_CORE 0",

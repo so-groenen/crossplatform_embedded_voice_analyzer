@@ -1,7 +1,10 @@
 
 
 #include <array>
+#include <atomic>
 #include <bit>
+#include <concepts>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -77,7 +80,9 @@ constexpr u32 DMA_CH1             = 1;
 enum class UserMode : u8
 {
     Peak = 0,
-    Spectrum = 1
+    Spectrum = 1,
+    DeepSleep = 2,
+    Pause = 3,
 };
 
 enum class ModeState : u8
@@ -89,10 +94,11 @@ enum class ModeState : u8
 
 enum class AnalyzerMode : u32
 {
-    Start = 0,
-    Stop = 1,
-    MeasurePeak = 2,
-    MeasureSpectrum = 3
+    Idle = 0,
+    Start = 1,
+    Stop = 2,
+    MeasurePeak = 3,
+    MeasureSpectrum = 4
 };
 
 
@@ -105,33 +111,59 @@ using interrupts::InputHandler;
 
 class ButtonDriver
 {
-    Input& m_btn1;
+    Input& m_btn_mode_change;
+    Input& m_btn_pause;
     pico2_w::Output& m_led;
-    i32 m_debounce_us{10'000};
+    i32 m_debounce_us{};
     absolute_time_t m_last1{get_absolute_time()};
+    absolute_time_t m_last2{get_absolute_time()};
     volatile bool m_fired{};
+    bool m_is_mode_change{};
 public:   
     template<size_t N>
     using IrqHandler = InputHandler<ButtonDriver, N>;
 
     
     template<size_t N>
-    explicit ButtonDriver(IrqHandler<N>& irq, Input& bt1, pico2_w::Output& led)
-        : m_btn1(bt1), m_led(led) 
+    explicit ButtonDriver(IrqHandler<N>& irq, Input& mode_btn, Input& pause_btn, pico2_w::Output& led, i32 debounce_us = 10'000)
+        : m_btn_mode_change(mode_btn), m_btn_pause(pause_btn), m_led(led), m_debounce_us{debounce_us}
     {
         irq.bind_driver(this);
-        irq.bind_interrupt(&m_btn1);
-        
+        irq.bind_interrupt(&m_btn_mode_change);
+        irq.bind_interrupt(&m_btn_pause);
     }
     _ISR_INPUT_CALLBACK void callback_from_isr(u16 pin)
     {
-        assert(pin = m_btn1.pin());
+        // assert(pin = m_btn_mode_change.pin());
         auto now  = get_absolute_time(); 
-        if(absolute_time_diff_us(m_last1, now) > m_debounce_us)
+
+        if(pin == m_btn_mode_change.pin())
         {
-            m_fired = true;
-            m_led.toggle();
+            if(absolute_time_diff_us(m_last1, now) > m_debounce_us)
+            {
+                m_fired = true;
+                m_led.toggle();
+                m_last1 = now;
+                m_is_mode_change = true;
+
+            }
         }
+
+        if(pin == m_btn_pause.pin())
+        {
+            if(absolute_time_diff_us(m_last2, now) > m_debounce_us)
+            {
+                m_fired = true;
+                // m_led.toggle();
+                m_last2 = now;
+                m_is_mode_change = false;
+            }
+        }
+
+    }
+    bool is_mode_change_event() const 
+    {
+        return m_is_mode_change;
     }
     inline bool has_fired() const 
     {
@@ -146,7 +178,7 @@ public:
 
  
 // Define the MyIRQHandler class which will call the ButtonDriver callback from within the ISR, and register 1 button
-using MyIRQHandler = INPUT_IRQ_HANDLER(ButtonDriver, 1);
+using MyIRQHandler = INPUT_IRQ_HANDLER(ButtonDriver, 2);
 BIND_INTERRUPT(btn_irq, MyIRQHandler, handler)  
 
 
@@ -203,10 +235,10 @@ namespace multicore
         {
             return reinterpret_cast<T>(multicore_fifo_pop_blocking_inline());
         }
-        else if constexpr (std::is_same_v<T, u32>)
-        {
-            return multicore_fifo_pop_blocking_inline();
-        }
+        // else if constexpr (std::is_same_v<T, u32>)
+        // {
+        //     return multicore_fifo_pop_blocking_inline();
+        // }
         // else if constexpr (std::is_floating_point_v<T>) 
         // {
         //     u32 raw_val = multicore_fifo_pop_blocking();
@@ -219,6 +251,31 @@ namespace multicore
             return static_cast<T>(multicore_fifo_pop_blocking_inline());
         }  
     }
+    template<typename T>
+    inline void push_timeout_us(const T value, u64 time_out)
+    {
+        if constexpr (std::is_pointer_v<T>)
+        {
+            multicore_fifo_push_timeout_us(reinterpret_cast<uintptr_t>(value), time_out);
+        } 
+        else
+        {
+            multicore_fifo_push_timeout_us(static_cast<u32>(value), time_out);
+        }
+    }
+
+    template<typename T>
+    inline void pop_timeout_us(T& value, u64 time_out)
+    {
+        // if constexpr (std::is_pointer_v<T>)
+        // {
+        //     multicore_fifo_pop_timeout_us(time_out, reinterpret_cast<u32*>(value));
+        // } 
+        // else
+        // {
+            multicore_fifo_pop_timeout_us(time_out, static_cast<u32*>(&value));
+        // }
+    }
 
     template<typename T>
     inline void push_blocking(const T value)
@@ -228,10 +285,10 @@ namespace multicore
         {
             multicore_fifo_push_blocking_inline(reinterpret_cast<uintptr_t>(value));
         } 
-        else if constexpr (std::is_same_v<T, u32>)
-        {
-            multicore_fifo_push_blocking_inline(value);
-        }
+        // else if constexpr (std::is_same_v<T, u32>)
+        // {
+        //     multicore_fifo_push_blocking_inline(value);
+        // }
         // else if constexpr (std::is_floating_point_v<T>) 
         // {
         //     const T val = value;
@@ -251,157 +308,51 @@ namespace multicore
     inline bool wready() {return multicore_fifo_wready();};
     inline void drain() {multicore_fifo_drain();};
 }
- 
-#include "queue.hpp"
-std::optional<Queue<AnalyzerMode>> analyzer_mode_queue{};
-
- 
-
-
-  
-void core1_entry() 
-{
-    btn_irq.enable(true); // enable interrupts on core1!
-
-    // constexpr u32 baudrate = 460'800;     
-    constexpr u32 baudrate = 921'600;     
-    
-    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
-    uart.set_baudrate(baudrate);
-    uart.set_hardware_flow_control(true, true);
-
-    static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
-    static Single_t<f32> peak_packet;
-
-    peak_packet.header       = {0xAB, 0xBC, 0xCD, 0xDE};
-    magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
-
-
-    constexpr u16 LED_PIN = 15;
-    constexpr u16 BTN_PIN1{10};
-
-
-    pico2_w::Output led_core1{LED_PIN};
-    led_core1.set_high();
-
-    Input button(BTN_PIN1, Pull::Up);
-    button.enable_interrupts(GPIO_IRQ_EDGE_FALL);
-
-    CountdownTimer<1> tasks{};
-    tasks.add_task_ms(250);
- 
-    constexpr size_t led_task  = 0;
-    // constexpr size_t switch_task  = 1;
-    
-    // Dma dma{};
-    // dma.read_from_memory(true);
-    // dma.write_to_memory(true);
-    // dma.set_transfer_size<f32>();
-    // dma.set_data_request(DREQ_FORCE);
- 
-    ButtonDriver button_driver(btn_irq, button, led_core1);
- 
-
-    ModeState mode_state = ModeState::Running;
-    UserMode user_mode   = UserMode::Peak;
-
-
-    multicore::push_blocking(AnalyzerMode::MeasurePeak);
-    led_core1.set_high();
-
-    CountdownTimer<1> timer{};
-    timer.add_task_ms(250);
-
-    static AnalyzerMode analyzer_mode = AnalyzerMode::MeasurePeak;
-
-    while (true)
-    {
-        if(button_driver.has_fired())
-        {
-            button_driver.acknowledge();
-            mode_state = ModeState::Leaving;
-        }
-
-
-        switch (user_mode)
-        {
-            case UserMode::Peak:
-                switch (mode_state)
-                {
-                    case ModeState::Entering:
-                    {
-                        analyzer_mode = AnalyzerMode::MeasurePeak;
-                        analyzer_mode_queue->try_add(analyzer_mode);
-                        multicore_fifo_drain();
-                        mode_state = ModeState::Running;
-                    }
-                    case ModeState::Running:
-                    {
-                        peak_packet.data = multicore::pop_blocking<f32>();
-                        
-                        uart.dma_tx().await_blocking();                  
-                        uart.write_dma(&peak_packet, sizeof(peak_packet));
-                    }
-                    break;
-                    case ModeState::Leaving:
-                    {
-                        user_mode  = UserMode::Spectrum;
-                        mode_state = ModeState::Entering;
-                    }
-                    break;
-                }
-                break;
-
-            case UserMode::Spectrum:
-                switch (mode_state)
-                {
-                    case ModeState::Entering:
-                    {
-                        analyzer_mode = AnalyzerMode::MeasureSpectrum;
-                        analyzer_mode_queue->try_add(analyzer_mode);
-                        mode_state = ModeState::Running;
-                        multicore_fifo_drain();
-                    }
-                    case ModeState::Running:
-                    { 
-                        auto raw_mags_ptr = multicore::pop_blocking<const f32*>();
-                        std::span<const f32> magnitudes{raw_mags_ptr, FFT_SIZE/2};
-
-                        magnitude_packet.copy_sample(magnitudes);
-
-                        uart.dma_tx().await_blocking();
-                        uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
-                    }
-                    break;
-                    case ModeState::Leaving:
-                    {
-                        user_mode  = UserMode::Peak;
-                        mode_state = ModeState::Entering;
-                    }
-                    break;
-                }
-                break;
-        }
-    }
-}
-
 using voice_analyzer::tiny_dsp::RealFloating32FFT;
 
-int main() 
+#include "queue.hpp"
+std::optional<Queue<AnalyzerMode>> s_analyzer_mode_queue{};
+
+ 
+// std::atomic<bool> core1_sleep_ready(false);
+
+
+class AtomicFlag
 {
-    stdio_init_all();
-    btn_irq.enable(true); 
+    std::atomic<bool> m_flag{false};
+public:
+    explicit AtomicFlag(bool val = false)
+     : m_flag(val)
+    {
+    }
+    inline void signal()
+    {
+        m_flag.store(true, std::memory_order_release);
+    }
+    inline void await_signal()
+    {
+        while(!m_flag.load(std::memory_order_acquire))
+            tight_loop_contents();
+    }
+    inline void acknowledge_signal()
+    {
+        m_flag.store(false, std::memory_order_release);
+    }
+};
 
-    sleep_ms(25);
-    multicore_reset_core1();
-    sleep_ms(25);
+static AtomicFlag s_core1_state_changed{};
 
+#include "repeating_timers.hpp"
 
-    analyzer_mode_queue = Queue<AnalyzerMode>(2, spin_lock_claim_unused(true));
+using namespace timers;
 
+void core1_entry() 
+{
+    i2s_irq.enable(true);
 
+    constexpr i32 LED_BLINK_MS  = 125;
     constexpr u16 CORE0_LED_PIN = 14;
-    pico2_w::Output led_core0{CORE0_LED_PIN};
+    pico2_w::Output led_core1{CORE0_LED_PIN};
 
     constexpr Sph0645Config config
     {
@@ -431,29 +382,37 @@ int main()
     static VoiceAnalyzer analyzer{i2s, dsp, analyzer_config};
  
     if(!analyzer.init())
-        error_led(led_core0);
+        error_led(led_core1);
 
  
-    CountdownTimer<1> timer{};
-    timer.add_task_ms(250);
- 
-    constexpr size_t led_task  = 0;   
-    multicore_launch_core1(core1_entry);
- 
+    BasicTimer<Reapating> timer{};
+
+    if(!timer.start_ms(LED_BLINK_MS))
+        panic("Could not init timer \n");
+
+  
     analyzer.start(); 
-    AnalyzerMode analyzer_mode = AnalyzerMode::MeasurePeak;
 
 
-    analyzer_mode = multicore::pop_blocking<AnalyzerMode>();
+    AnalyzerMode analyzer_mode = AnalyzerMode::Start;
+
+    auto await_command = []{ while(s_analyzer_mode_queue->is_empty())tight_loop_contents();};
+    
+    await_command();
+
     while (true) 
     {
-        if(timer.is_ready(led_task))
-            led_core0.toggle();
-
-
-        if(!analyzer_mode_queue->is_empty())
+        if(!s_analyzer_mode_queue->is_empty())
         {
-            (void)analyzer_mode_queue->try_remove(analyzer_mode);
+            // analyzer_mode = s_analyzer_mode_queue->try_remove().value();
+            s_analyzer_mode_queue->try_remove(&analyzer_mode);
+            multicore::drain();
+            s_core1_state_changed.signal();
+        }
+        if(timer.has_fired())
+        {
+            timer.acknowledge();
+            led_core1.toggle();
         }
 
  
@@ -466,6 +425,7 @@ int main()
             }
             break;
             
+
             case AnalyzerMode::MeasureSpectrum:
             {
                 analyzer.compute_magnitudes();
@@ -473,12 +433,35 @@ int main()
             }
             break;
 
-            // case AnalyzerMode::Stop:
-            //     analyzer.stop();
-            //     multicore_fifo_pop_blocking();
-            // case AnalyzerMode::Start:
-            //     analyzer.start();
-                // break;
+
+            case AnalyzerMode::Stop:
+                analyzer.stop();
+                // // i2s_irq.enable(false);
+                // while(!timer.has_fired())   // avoid spurious pending timer interrupts which would disturb the _wfe by waiting and directly cancelling futur ones.
+                //     tight_loop_contents();
+                // timer.acknowledge();
+
+                // if(!timer.deactivate())
+                //     panic("Could not cancel timer");
+                 
+                led_core1.set_low();
+                __wfe();
+
+                analyzer_mode = AnalyzerMode::Idle;
+                [[fallthrough]];
+
+            case AnalyzerMode::Idle:
+                break;
+  
+            case AnalyzerMode::Start:
+
+                // if(!timer.start_ms(LED_BLINK_MS))
+                //     panic("Could not re-init timer");
+                await_command();
+                // i2s_irq.enable(true);
+                analyzer.start();
+                break;
+
             default:
                 break;
         }
@@ -486,3 +469,252 @@ int main()
 }
 
  
+ 
+#include <pico/low_power.h>
+
+
+
+class AppStateManager 
+{
+    Queue<AnalyzerMode>& m_analyzer_mode_queue;
+    AtomicFlag& m_core1_state;
+    UserMode m_mode   = UserMode::Peak;
+    ModeState m_state = ModeState::Running;
+
+public:
+    explicit AppStateManager(Queue<AnalyzerMode>& queue, AtomicFlag& flag)
+     : m_analyzer_mode_queue{queue}, m_core1_state{flag}
+    {
+    }
+    inline UserMode user_mode() const {return m_mode;}
+    inline ModeState state() const {return m_state;}
+    void set_state(UserMode mode, ModeState state)
+    {
+        m_mode = mode;
+        m_state = state;
+    }
+    void signal_core1(AnalyzerMode mode)
+    {
+        m_analyzer_mode_queue.try_add(mode);
+    }
+    void sev() // send event ARM instruction
+    {
+        __sev();
+    }
+    void await_and_acknowledge_core1_state_change()
+    {
+        m_core1_state.await_signal();
+        m_core1_state.acknowledge_signal();
+    }
+    void set_to_enter()
+    {
+        m_state = ModeState::Entering;
+    }
+    void set_to_run()
+    {
+        m_state = ModeState::Running;
+    }
+    void set_to_leave()
+    {
+        m_state = ModeState::Leaving;
+    }
+    void transition_to(UserMode new_mode)
+    {
+        m_mode = new_mode;
+        set_to_enter();
+    }
+};
+
+template<std::invocable Fn>
+void discard_some(Fn func, size_t N)
+{
+    for(size_t n = 0; n < N; n++)
+        (void)func();
+}
+
+int main() 
+{
+    stdio_init_all();
+    btn_irq.enable(true); 
+
+    s_analyzer_mode_queue = Queue<AnalyzerMode>(8, spin_lock_claim_unused(true));
+
+    // sleep_ms(100);
+    // multicore_reset_core1();
+    sleep_ms(10);
+ 
+
+
+    AppStateManager app_manager(s_analyzer_mode_queue.value(), s_core1_state_changed);
+    app_manager.set_state(UserMode::Peak, ModeState::Entering); 
+
+
+ 
+
+
+    // constexpr u32 baudrate = 460'800;     
+    constexpr u32 baudrate = 921'600;      
+    
+    auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
+    uart.set_baudrate(baudrate);
+    uart.set_hardware_flow_control(true, true);
+
+    static Packet_t<f32, FFT_SIZE/2> magnitude_packet;
+    static Single_t<f32> peak_packet;
+
+    peak_packet.header       = {0xAB, 0xBC, 0xCD, 0xDE};
+    magnitude_packet.header  = {0xFF, 0xEE, 0xDD, 0xCC};
+
+    // BasicTimer<Reapating> timer{};
+    // if(!timer.init_timer_ms(500))
+    //     panic("Could not init timer \n");
+
+
+    constexpr u16 LED_PIN = 15;
+    constexpr u16 BTN_PIN1{10};
+    constexpr u16 BTN_PIN2{21};
+
+
+    pico2_w::Output led_core0{LED_PIN};
+    led_core0.set_high();
+
+    Input button_mode_change(BTN_PIN1, Pull::Up);
+    button_mode_change.enable_interrupts(GPIO_IRQ_EDGE_FALL);
+
+    Input button_pause(BTN_PIN2, Pull::Up);
+    button_pause.enable_interrupts(GPIO_IRQ_EDGE_FALL);
+
+
+    constexpr i32 debounce_us = 100'000; 
+    ButtonDriver button_driver(btn_irq, button_mode_change, button_pause, led_core0, debounce_us);
+ 
+    led_core0.set_high();
+ 
+    UserMode next_mode{app_manager.user_mode()};
+    multicore_launch_core1(core1_entry);
+
+    constexpr size_t samples_to_discard = 6;
+    auto get_mag_pointers = []() -> const f32* {return multicore::pop_blocking<const f32*>();};
+    auto get_freq_peaks   = []() -> f32 {return multicore::pop_blocking<f32>();};
+
+    while (true)
+    {
+        if(button_driver.has_fired())
+        {
+            button_driver.acknowledge();
+
+            static UserMode last_mode{};
+            if(app_manager.user_mode() != UserMode::Pause)
+                last_mode = app_manager.user_mode();
+
+            if(button_driver.is_mode_change_event())
+            {
+                next_mode = (last_mode == UserMode::Peak)? UserMode::Spectrum : UserMode::Peak;
+            }
+            else
+            {
+                next_mode = (app_manager.user_mode() == UserMode::Pause)? last_mode : UserMode::Pause;
+            }
+            app_manager.set_to_leave();
+        }
+
+ 
+        // if(timer.has_fired())
+        // {
+        //     timer.acknowledge();
+        //     led_core0.toggle();
+        // }
+
+
+        switch (app_manager.user_mode())
+        {
+            case UserMode::Peak:
+                switch (app_manager.state())
+                {
+                    case ModeState::Entering:
+                        app_manager.signal_core1(AnalyzerMode::MeasurePeak);
+                        app_manager.await_and_acknowledge_core1_state_change();
+                        app_manager.set_to_run();
+                        discard_some(get_freq_peaks, samples_to_discard);
+                        [[fallthrough]];
+                    case ModeState::Running:
+                        peak_packet.data = get_freq_peaks();
+                        // To be replaced with SPI - LCD stuff!
+                        // dispatch data via UART to PySerial 
+                        uart.dma_tx().await_blocking();                  
+                        uart.write_dma(&peak_packet, sizeof(peak_packet));
+                        break;
+                    case ModeState::Leaving:
+                        app_manager.transition_to(next_mode);
+                        break;
+                }
+                break;
+
+            case UserMode::Spectrum:
+                switch (app_manager.state())
+                {
+                    case ModeState::Entering:
+                        app_manager.signal_core1(AnalyzerMode::MeasureSpectrum);
+                        app_manager.await_and_acknowledge_core1_state_change();
+                        app_manager.set_to_run();
+                        discard_some(get_mag_pointers, samples_to_discard);
+                        [[fallthrough]];
+                    case ModeState::Running:
+                    // { 
+                        // To be replaced with SPI - LCD stuff!
+                        // dispatch data via UART to PySerial 
+ 
+                        // auto raw_mags_ptr = get_mag_pointers();
+                        // std::span<const f32> magnitudes{raw_mags_ptr, FFT_SIZE/2};
+                        magnitude_packet.copy_sample(std::span{get_mag_pointers(), FFT_SIZE/2});
+
+                        uart.dma_tx().await_blocking();
+                        uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
+                        // }
+                        break;
+                    case ModeState::Leaving:
+                        app_manager.transition_to(next_mode); 
+                        break;
+                }
+                break;
+            
+
+            case UserMode::Pause:
+                switch (app_manager.state())
+                {
+                    case ModeState::Entering:
+                    {
+                        uart.dma_tx().await_blocking();          
+                        uart.wait_blocking_tx(); 
+                        
+                        app_manager.signal_core1(AnalyzerMode::Stop);
+                        app_manager.await_and_acknowledge_core1_state_change();
+                        app_manager.set_to_run();
+                    }
+                    [[fallthrough]];
+                    
+                    case ModeState::Running:
+                    { 
+                        // tight_loop_contents();
+                        __wfi();
+                    }
+                    break;
+
+                    case ModeState::Leaving:
+                    {
+                        app_manager.signal_core1(AnalyzerMode::Start);
+                        app_manager.sev();
+                        app_manager.await_and_acknowledge_core1_state_change();
+                        app_manager.transition_to(UserMode::Peak);
+                    }
+                    break;
+                }
+                break;
+            
+
+            default:
+                break;
+
+        }
+    }
+}

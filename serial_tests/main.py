@@ -1,16 +1,18 @@
 import sys
 import struct
 from collections import deque
+from matplotlib.backend_bases import CloseEvent
 import numpy as np
 import serial
 from scipy.interpolate import interp1d
 
 from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtGui import QCloseEvent
 import pyqtgraph as pg
 
 # --- Configuration Parameters ---
-PORT          = "/dev/ttyACM1"
+PORT          = "/dev/ttyACM0"
 BAUDRATE      = 921_600
 SAMPLE_RATE   = 20_000
 FFT_SIZE      = 1024
@@ -19,6 +21,8 @@ MAG_SIZE      = FFT_SIZE // 2
 DISPLAY_WIDTH = 240  # Rolling buffer width
 MIN_FREQ      = 50
 MAX_FREQ      = 450
+MAX_SPEC_FREQ = 1000
+
 MAX_AMP       = 0.1
 
 HEADER_PEAK   = b"\xab\xbc\xcd\xde"
@@ -33,8 +37,10 @@ K_MIN            = np.searchsorted(full_freq_axis, MIN_FREQ)
 K_MAX            = np.searchsorted(full_freq_axis, MAX_FREQ)
 freq_axis_sliced = full_freq_axis[K_MIN:K_MAX]
 
-INTERP_SAMPLES   = 100
+INTERP_SAMPLES   = 200
 freq_axis_interp = np.linspace(freq_axis_sliced[0], freq_axis_sliced[-1], INTERP_SAMPLES)
+# INTERP_SAMPLES   = 500
+# freq_axis_interp = np.linspace(full_freq_axis[0], full_freq_axis[-1], INTERP_SAMPLES)
 
 
 # --- Serial Reader Worker Thread ---
@@ -77,9 +83,11 @@ class SerialReaderThread(QThread):
                 elif header == HEADER_MAG:
                     raw_bytes = self.read_exact(ser, SIZE_MAG)
                     if raw_bytes:
-                        unpacked = struct.unpack("<512f", raw_bytes)
+                        unpacked = struct.unpack(f"<{MAG_SIZE}f", raw_bytes)
                         mag_array = np.array(unpacked, dtype=np.float32)
                         self.data_received.emit("spectrogram", mag_array)
+                else:
+                    pass 
 
         ser.close()
 
@@ -134,7 +142,7 @@ class MainWindow(QMainWindow):
             return
 
         self.plot_widget.clear()
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        # self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
 
         if mode == "spectrogram":
             self.plot_widget.setTitle("Scrolling Spectrogram (Magnitude)")
@@ -142,9 +150,10 @@ class MainWindow(QMainWindow):
             self.plot_widget.setLabel('bottom', 'Time History (Frames)')
             
             # Add Image Item and Set Scale to match Frequency Bounds
-            self.plot_widget.addItem(self.img_item)
-            scale_y = (MAX_FREQ - MIN_FREQ) / INTERP_SAMPLES
+            # scale_y = (MAX_FREQ - MIN_FREQ) / INTERP_SAMPLES
+            # self.img_item.setRect(0, MIN_FREQ, DISPLAY_WIDTH, MAX_FREQ - MIN_FREQ)
             self.img_item.setRect(0, MIN_FREQ, DISPLAY_WIDTH, MAX_FREQ - MIN_FREQ)
+            self.plot_widget.addItem(self.img_item)
 
         elif mode == "peak":
             self.plot_widget.setTitle("Horizontal Scrolling Peak Frequency Tracker")
@@ -162,6 +171,7 @@ class MainWindow(QMainWindow):
 
         if mode == "spectrogram":
             mag_sliced = np.nan_to_num(payload[K_MIN:K_MAX], nan=0.0, posinf=MAX_AMP, neginf=0.0)
+            # mag_sliced = np.nan_to_num(payload, nan=0.0, posinf=MAX_AMP, neginf=0.0)
             try:
                 quad_interp = interp1d(
                     freq_axis_sliced,
@@ -169,9 +179,16 @@ class MainWindow(QMainWindow):
                     kind="quadratic",
                     fill_value="extrapolate",
                 )
+                # quad_interp = interp1d(
+                #     full_freq_axis,
+                #     mag_sliced,
+                #     kind="quadratic",
+                #     fill_value="extrapolate",
+                # )
                 mag_interp = np.clip(quad_interp(freq_axis_interp), 0, None)
             except Exception:
                 mag_interp = np.zeros_like(freq_axis_interp)
+                # mag_interp = np.zeros_like(full_freq_axis)
 
             # Shift display buffer left and insert vector
             self.display_buffer[:-1, :] = self.display_buffer[1:, :]
@@ -187,9 +204,10 @@ class MainWindow(QMainWindow):
         elif self.current_rendered_mode == "peak":
             self.curve_item.setData(np.arange(DISPLAY_WIDTH), list(self.peak_history))
 
-    def closeEvent(self, event):
-        self.thread.stop()
-        event.accept()
+    def closeEvent(self, a0: QCloseEvent):
+        print("Goodbye")
+        self.serial_thread.stop()
+        a0.accept()
 
 
 if __name__ == "__main__":

@@ -79,7 +79,10 @@ public:
         dma->set_irq(IRQ_n);
  
     }
-
+    void enable(bool v)
+    {
+        irq_set_enabled(IRQ_n, v);
+    }
     inline void handle_isr() override
     {   
         for(size_t n = 0; n < this->m_dma_channels.size(); n++)

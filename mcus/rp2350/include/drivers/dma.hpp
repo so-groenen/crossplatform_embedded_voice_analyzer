@@ -173,6 +173,8 @@ public:
     {
         dma_channel_start(m_dma);
     }
+ 
+    
     uint channel() const 
     {
         return m_dma;
