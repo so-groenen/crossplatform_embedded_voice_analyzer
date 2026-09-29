@@ -26,7 +26,7 @@ class AbstractI2sDriver
 {
 protected:
     Dma m_dma;
-    P m_i2s;
+    P m_i2s_pio;
     size_t m_current_buff{};
     std::span<u32> m_ping_pong[2];
     bool m_isr_fired{};
@@ -36,10 +36,10 @@ protected:
         m_dma.read_from_memory(false);
         m_dma.write_to_memory(true);
         m_dma.set_transfer_size<u32>();
-        m_dma.set_data_request(m_i2s.get_dreq(false));
+        m_dma.set_data_request(m_i2s_pio.get_dreq(false));
         m_dma.config_transfer(
             /*dest:*/ m_ping_pong[0].data(),
-            /*src:*/  m_i2s.get_rx_fifo_reg(),
+            /*src:*/  m_i2s_pio.get_rx_fifo_reg(),
             /*len:*/  m_ping_pong[0].size());
     }
 public:
@@ -47,7 +47,7 @@ public:
             std::span<u32> ping, 
             std::span<u32> pong,
             Dma dma)
-        : m_i2s(std::move(pio_i2s)), m_dma{std::move(dma)}
+        : m_i2s_pio(std::move(pio_i2s)), m_dma{std::move(dma)}
     {
         assert(ping.size() == pong.size());
         m_ping_pong[0] = ping;
@@ -65,7 +65,7 @@ public:
     }
     u32 get_sample_rate() const
     {
-        return m_i2s.get_sample_rate();
+        return m_i2s_pio.get_sample_rate();
     }
 
     _DMA_ISR_CALLBACK void callback_from_isr(uint dma_chan)
@@ -85,19 +85,24 @@ public:
  
     void start()
     {
-        m_i2s.start();
+        m_current_buff = 0;
+        m_isr_fired    = false; 
+
+        m_i2s_pio.start();
+        m_dma.enable_channel(true);
         m_dma.start();
     }
     void stop()
     {
-        m_i2s.stop();
-        m_dma.abort();
+        // m_dma.enable_channel(false);
+        m_dma.await_blocking();
+        m_i2s_pio.stop();
     }
-    void change_buffer()
-    {
-        m_current_buff ^= 1; 
-        m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
-    }
+    // void change_buffer()
+    // {
+    //     m_current_buff ^= 1; 
+    //     m_dma.set_write_addr(m_ping_pong[m_current_buff].data(), true);
+    // }
 };
 
 
