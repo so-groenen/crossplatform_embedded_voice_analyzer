@@ -2,6 +2,7 @@
 #define QUEUES_HPP
 
 #include "pico/util/queue.h"
+#include <optional>
 
 
 
@@ -20,15 +21,31 @@ public:
     }
     void remove_blocking(T& state)
     {
-        queue_remove_blocking(&m_queue,reinterpret_cast<void*>(state));
+        queue_remove_blocking(&m_queue, reinterpret_cast<void*>(&state));
     }
-    void add_blocking(const T& state)
+    T remove_blocking()
+    {
+        T v{};
+        queue_remove_blocking(&m_queue, reinterpret_cast<void*>(&v));
+        return v;
+    }
+    void add_blocking(const T* state)
     {
         queue_add_blocking(&m_queue,reinterpret_cast<const void*>(state));
     }
+    void add_blocking(T state)
+    {
+        queue_add_blocking(&m_queue, reinterpret_cast<const void*>(&state));
+    }
     void peek_blocking(T& state)
     {
-        queue_peek_blocking(&m_queue,reinterpret_cast<void*>(state));
+        queue_peek_blocking(&m_queue,reinterpret_cast<void*>(&state));
+    }
+    T* peek_blocking()
+    {
+        T* v{};
+        queue_peek_blocking(&m_queue, reinterpret_cast<void*>(v));
+        return v;
     }
 
 
@@ -42,18 +59,44 @@ public:
     }
 
 
-    inline bool try_add(const T& state)
+    // inline bool try_add(const T* state)
+    // {
+    //     return queue_try_add(&m_queue, reinterpret_cast<const void*>(state));
+    // }
+    inline bool try_remove(T* state)
     {
-        return queue_try_add(&m_queue, reinterpret_cast<const void*>(&state));
+        return queue_try_remove(&m_queue, reinterpret_cast<void*>(state));
     }
-    inline bool try_remove(T& state)
-    {
-        return queue_try_remove(&m_queue, reinterpret_cast<void*>(&state));
-    }
-    bool try_peek(T& state)
+    bool try_peek(T* state)
     {
         return queue_try_peek(&m_queue, reinterpret_cast<void*>(state));
     }
+
+
+    inline bool try_add(T state)
+    {
+        return queue_try_add(&m_queue, reinterpret_cast<const void*>(&state));
+    }
+    inline std::optional<T> try_remove()
+    {
+        T value{};
+        if(queue_try_remove(&m_queue, reinterpret_cast<void*>(&value)))
+        {
+            return value;
+        }
+        return std::nullopt;
+    }
+
+    inline std::optional<T*> try_peek()
+    {
+        T* value{};
+        if(queue_try_peek(&m_queue, reinterpret_cast<void*>(value)))
+        {
+            return value;
+        }
+        return std::nullopt;
+    }
+    
 
     ~Queue()
     {
