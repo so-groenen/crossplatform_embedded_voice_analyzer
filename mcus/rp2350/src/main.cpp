@@ -532,6 +532,69 @@ void discard_some(Fn func, size_t N)
         (void)func();
 }
 
+class SomePrinter 
+{
+    size_t m_it{};
+    size_t m_counter{};
+public:
+    explicit SomePrinter(size_t iterations)
+     : m_it(iterations)
+    {
+    }
+    virtual void print_some(f32 v) = 0;
+    virtual ~SomePrinter() = default;
+protected:
+    bool is_ok()
+    {
+        m_counter++;
+        if(m_counter == m_it)
+        {
+            m_counter = 0;
+            return true;
+        }
+        return false;
+    }
+};
+
+class PeakPrinter : public SomePrinter
+{
+public:
+    explicit PeakPrinter(size_t it)
+     : SomePrinter(it)
+    {}
+    void print_some(f32 v) override 
+    {
+        if(this->is_ok())
+        {
+            printf("PEAK: Got %.2f Hz !\n", v);
+        }
+    }
+};
+
+class MagPrinter : public SomePrinter
+{
+public:
+    explicit MagPrinter(size_t it)
+     : SomePrinter(it)
+    {}
+    static f32 mean(std::span<const f32> arr)
+    {
+        f32 mean = 0;
+        for(const auto& v : arr)
+        {
+            mean += v;
+        }
+        return mean / arr.size();
+    }
+    void print_some(f32 v) override 
+    {
+        if(this->is_ok())
+        {
+            printf("MAG: Got %.2f Hz !\n", v);
+        }
+    }
+};
+
 int main() 
 {
     stdio_init_all();
@@ -549,13 +612,11 @@ int main()
     app_manager.set_state(UserMode::Peak, ModeState::Entering); 
 
 
- 
-
-
-    // constexpr u32 baudrate = 460'800;     
     constexpr u32 baudrate = 921'600;      
-    
+    // constexpr u32 baudrate = 250'000;     
+
     auto uart = Uart<IOMode::NonBlocking, TransferMode::Tx>::make(Dma{});
+    // auto uart = Uart<IOMode::Blocking, TransferMode::Tx>::make(uart0);
     uart.set_baudrate(baudrate);
     uart.set_hardware_flow_control(true, true);
 
@@ -597,7 +658,10 @@ int main()
     auto get_mag_pointers = []() -> const f32* {return multicore::pop_blocking<const f32*>();};
     auto get_freq_peaks   = []() -> f32 {return multicore::pop_blocking<f32>();};
 
-    while (true)
+    // PeakPrinter peak_printer{3};
+    // MagPrinter mag_printer{3};
+
+    while (true)    
     {
         if(button_driver.has_fired())
         {
@@ -638,9 +702,8 @@ int main()
                         discard_some(get_freq_peaks, samples_to_discard);
                         [[fallthrough]];
                     case ModeState::Running:
-                        peak_packet.data = get_freq_peaks();
-                        // To be replaced with SPI - LCD stuff!
-                        // dispatch data via UART to PySerial 
+                        // peak_printer.print_some(get_freq_peaks());
+                        peak_packet.data = get_freq_peaks(); 
                         uart.dma_tx().await_blocking();                  
                         uart.write_dma(&peak_packet, sizeof(peak_packet));
                         break;
@@ -666,11 +729,12 @@ int main()
  
                         // auto raw_mags_ptr = get_mag_pointers();
                         // std::span<const f32> magnitudes{raw_mags_ptr, FFT_SIZE/2};
+                        // mag_printer.print_some(MagPrinter::mean(std::span{get_mag_pointers(), FFT_SIZE/2}));
                         magnitude_packet.copy_sample(std::span{get_mag_pointers(), FFT_SIZE/2});
 
                         uart.dma_tx().await_blocking();
                         uart.write_dma(&magnitude_packet, sizeof(magnitude_packet));
-                        // }
+                        // // }
                         break;
                     case ModeState::Leaving:
                         app_manager.transition_to(next_mode); 
@@ -690,12 +754,12 @@ int main()
                         app_manager.signal_core1(AnalyzerMode::Stop);
                         app_manager.await_and_acknowledge_core1_state_change();
                         app_manager.set_to_run();
+                        // printf("Pause! \n");
                     }
                     [[fallthrough]];
                     
                     case ModeState::Running:
                     { 
-                        // tight_loop_contents();
                         __wfi();
                     }
                     break;

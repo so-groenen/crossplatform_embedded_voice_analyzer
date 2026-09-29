@@ -53,7 +53,7 @@ public:
         m_ping_pong[0] = ping;
         m_ping_pong[1] = pong;
 
-        setup_rx_mode();
+        // setup_rx_mode();
     }
     inline bool has_isr_fired() const 
     {
@@ -87,6 +87,7 @@ public:
     {
         m_current_buff = 0;
         m_isr_fired    = false; 
+        setup_rx_mode();        //reset to correct ping pong buffer
 
         m_i2s_pio.start();
         m_dma.enable_channel(true);

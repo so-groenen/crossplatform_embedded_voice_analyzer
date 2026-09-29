@@ -44,6 +44,8 @@ public:
     {
         pio_sm_clear_fifos(m_pio_inst, m_pio_sm);
         pio_sm_restart(m_pio_inst, m_pio_sm);
+        pio_sm_exec(m_pio_inst, m_pio_sm, pio_encode_jmp(m_offset));
+
         pio_sm_set_enabled(m_pio_inst, m_pio_sm, true);
     }
     void stop()

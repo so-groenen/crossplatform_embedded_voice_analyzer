@@ -280,7 +280,7 @@ public:
         }
         void stop()
         {
-            m_i2s.start(); 
+            m_i2s.stop(); 
         }
         inline auto get_raw_mag() -> std::array<FourierType, FFT_N/2>&
         {
