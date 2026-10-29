@@ -7,8 +7,8 @@ import serial
 from scipy.interpolate import interp1d
 
 from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QGraphicsRectItem
+from PyQt6.QtGui import QCloseEvent, QColor, QBrush, QPen
 import pyqtgraph as pg
 
 # --- Configuration Parameters ---
@@ -118,7 +118,13 @@ class MainWindow(QMainWindow):
 
         # Visualizer Graphics Items
         self.img_item = pg.ImageItem()
-        self.curve_item = pg.PlotCurveItem(pen=pg.mkPen(color='#ff7f0e', width=2))
+        # self.curve_item = pg.PlotCurveItem(pen=pg.mkPen(color='#ff7f0e', width=2))
+        self.curve_item = pg.ScatterPlotItem( 
+            size=5, 
+            pen=pg.mkPen(None), # No border
+            brush=pg.mkBrush(color="#f12020"), 
+            symbol='o'
+        )
 
         # Colormap for Spectrogram
         cmap = pg.colormap.get('inferno')
@@ -152,16 +158,41 @@ class MainWindow(QMainWindow):
             # Add Image Item and Set Scale to match Frequency Bounds
             # scale_y = (MAX_FREQ - MIN_FREQ) / INTERP_SAMPLES
             # self.img_item.setRect(0, MIN_FREQ, DISPLAY_WIDTH, MAX_FREQ - MIN_FREQ)
-            self.img_item.setRect(0, MIN_FREQ, DISPLAY_WIDTH, MAX_FREQ - MIN_FREQ)
+            self.img_item.setRect(0, MIN_FREQ, DISPLAY_WIDTH, MAX_SPEC_FREQ - MIN_FREQ)
+            self.plot_widget.setYRange(0, MAX_SPEC_FREQ)
+
             self.plot_widget.addItem(self.img_item)
 
         elif mode == "peak":
+               # This places a rectangle starting at x=1, y=2 with width=2 and height=6
+
             self.plot_widget.setTitle("Horizontal Scrolling Peak Frequency Tracker")
             self.plot_widget.setLabel('left', 'Frequency', units='Hz')
             self.plot_widget.setLabel('bottom', 'Time History (Frames)')
             self.plot_widget.setYRange(MIN_FREQ, MAX_FREQ)
             self.plot_widget.setXRange(0, DISPLAY_WIDTH)
-            
+            fem_range  = [175, 100] # start, width
+            masc_range = [80, 60]
+
+
+            fem_rect = QGraphicsRectItem(-0.05*DISPLAY_WIDTH, fem_range[0], 1.1*DISPLAY_WIDTH, fem_range[1])
+            pink_color = QColor('pink')
+            fem_rect.setBrush(QBrush(pink_color))
+            fem_rect.setPen(QPen(pink_color))
+            self.plot_widget.addItem(fem_rect)
+
+            masc_rect = QGraphicsRectItem(-0.05*DISPLAY_WIDTH, masc_range[0], 1.1*DISPLAY_WIDTH, masc_range[1])
+            blue_color = QColor("#76e7de")
+            masc_rect.setBrush(QBrush(blue_color))
+            masc_rect.setPen(QPen(blue_color))
+            self.plot_widget.addItem(masc_rect)
+
+
+            self.plot_widget.addLine(y=100, pen='w')
+            self.plot_widget.addLine(y=150, pen='w')
+            self.plot_widget.addLine(y=200, pen='w')
+            self.plot_widget.addLine(y=250, pen='w')
+                        
             self.plot_widget.addItem(self.curve_item)
 
         self.current_rendered_mode = mode
@@ -195,6 +226,7 @@ class MainWindow(QMainWindow):
             self.display_buffer[-1, :] = mag_interp
 
         elif mode == "peak":
+            
             self.peak_history.append(payload)
 
     def update_gui(self):
